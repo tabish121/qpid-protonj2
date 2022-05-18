@@ -20,14 +20,20 @@ import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import org.apache.qpid.protonj2.client.ErrorCondition;
+import org.apache.qpid.protonj2.client.Listener;
+import org.apache.qpid.protonj2.client.ListenerOptions;
 import org.apache.qpid.protonj2.client.NextReceiverPolicy;
 import org.apache.qpid.protonj2.client.Receiver;
 import org.apache.qpid.protonj2.client.ReceiverOptions;
@@ -44,6 +50,8 @@ import org.apache.qpid.protonj2.client.exceptions.ClientOperationTimedOutExcepti
 import org.apache.qpid.protonj2.client.futures.AsyncResult;
 import org.apache.qpid.protonj2.client.futures.ClientFuture;
 import org.apache.qpid.protonj2.client.futures.ClientFutureFactory;
+import org.apache.qpid.protonj2.client.util.NoOpExecutor;
+import org.apache.qpid.protonj2.client.util.TrackableThreadFactory;
 import org.apache.qpid.protonj2.engine.Connection;
 import org.apache.qpid.protonj2.engine.Engine;
 import org.slf4j.Logger;
@@ -71,6 +79,9 @@ public class ClientSession implements Session {
     private final String sessionId;
     private final ClientSenderBuilder senderBuilder;
     private final ClientReceiverBuilder receiverBuilder;
+    private final AtomicReference<Thread> deliveryThread = new AtomicReference<Thread>();
+
+    private volatile ThreadPoolExecutor deliveryExecutor;
 
     private ClientNextReceiverSelector nextReceiverSelector;
     private volatile int closed;
@@ -110,6 +121,8 @@ public class ClientSession implements Session {
 
     @Override
     public void close() {
+        checkIsDeliveryThread();
+
         try {
             doClose(null).get();
         } catch (InterruptedException | ExecutionException e) {
@@ -119,6 +132,8 @@ public class ClientSession implements Session {
 
     @Override
     public void close(ErrorCondition error) {
+        checkIsDeliveryThread();
+
         try {
             doClose(error).get();
         } catch (InterruptedException | ExecutionException e) {
@@ -227,6 +242,82 @@ public class ClientSession implements Session {
             try {
                 checkClosedOrFailed();
                 createReceiver.complete(internalOpenDynamicReceiver(dynamicNodeProperties, receiverOptions));
+            } catch (Throwable error) {
+                createReceiver.failed(ClientExceptionSupport.createNonFatalOrPassthrough(error));
+            }
+        });
+
+        return connection.request(this, createReceiver);
+    }
+
+    @Override
+    public Listener openListener(String address) throws ClientException {
+        return openListener(address, null);
+    }
+
+    @Override
+    public Listener openListener(String address, ListenerOptions listenerOptions) throws ClientException {
+        checkClosedOrFailed();
+        final ClientFuture<Listener> createReceiver = getFutureFactory().createFuture();
+
+        serializer.execute(() -> {
+            try {
+                checkClosedOrFailed();
+                createReceiver.complete(internalOpenListener(address, listenerOptions));
+            } catch (Throwable error) {
+                createReceiver.failed(ClientExceptionSupport.createNonFatalOrPassthrough(error));
+            }
+        });
+
+        return connection.request(this, createReceiver);
+    }
+
+    @Override
+    public Listener openDurableListener(String address, String subscriptionName) throws ClientException {
+        return openDurableListener(address, subscriptionName, null);
+    }
+
+    @Override
+    public Listener openDurableListener(String address, String subscriptionName, ListenerOptions listenerOptions) throws ClientException {
+        checkClosedOrFailed();
+        final ClientFuture<Listener> createReceiver = getFutureFactory().createFuture();
+
+        serializer.execute(() -> {
+            try {
+                checkClosedOrFailed();
+                createReceiver.complete(internalOpenDurableListener(address, subscriptionName, listenerOptions));
+            } catch (Throwable error) {
+                createReceiver.failed(ClientExceptionSupport.createNonFatalOrPassthrough(error));
+            }
+        });
+
+        return connection.request(this, createReceiver);
+    }
+
+    @Override
+    public Listener openDynamicListener() throws ClientException {
+        return openDynamicListener(null, null);
+    }
+
+    @Override
+    public Listener openDynamicListener(Map<String, Object> dynamicNodeProperties) throws ClientException {
+        return openDynamicListener(dynamicNodeProperties, null);
+    }
+
+    @Override
+    public Listener openDynamicListener(ListenerOptions listenerOptions) throws ClientException {
+        return openDynamicListener(null, listenerOptions);
+    }
+
+    @Override
+    public Listener openDynamicListener(Map<String, Object> dynamicNodeProperties, ListenerOptions listenerOptions) throws ClientException {
+        checkClosedOrFailed();
+        final ClientFuture<Listener> createReceiver = getFutureFactory().createFuture();
+
+        serializer.execute(() -> {
+            try {
+                checkClosedOrFailed();
+                createReceiver.complete(internalOpenDynamicListener(dynamicNodeProperties, listenerOptions));
             } catch (Throwable error) {
                 createReceiver.failed(ClientExceptionSupport.createNonFatalOrPassthrough(error));
             }
@@ -404,6 +495,18 @@ public class ClientSession implements Session {
         return (ClientReceiver) receiverBuilder.dynamicReceiver(dynamicNodeProperties, receiverOptions).open();
     }
 
+    ClientListener internalOpenListener(String address, ListenerOptions listenerOptions) throws ClientException {
+        return (ClientListener) receiverBuilder.listener(address, listenerOptions).open();
+    }
+
+    ClientListener internalOpenDurableListener(String address, String subscriptionName, ListenerOptions listenerOptions) throws ClientException {
+        return (ClientListener) receiverBuilder.durableListener(address, subscriptionName, listenerOptions).open();
+    }
+
+    ClientListener internalOpenDynamicListener(Map<String, Object> dynamicNodeProperties, ListenerOptions listenerOptions) throws ClientException {
+        return (ClientListener) receiverBuilder.dynamicListener(dynamicNodeProperties, listenerOptions).open();
+    }
+
     ClientSender internalOpenSender(String address, SenderOptions senderOptions) throws ClientException {
         return (ClientSender) senderBuilder.sender(address, senderOptions).open();
     }
@@ -489,6 +592,25 @@ public class ClientSession implements Session {
         return connection;
     }
 
+    Executor getDispatcherExecutor() {
+        ThreadPoolExecutor exec = deliveryExecutor;
+        if (exec == null) {
+            synchronized (options) {
+                if (deliveryExecutor == null) {
+                    if (!isClosed()) {
+                        deliveryExecutor = exec = createExecutor("delivery dispatcher", deliveryThread);
+                    } else {
+                        return NoOpExecutor.INSTANCE;
+                    }
+                } else {
+                    exec = deliveryExecutor;
+                }
+            }
+        }
+
+        return exec;
+    }
+
     //----- Private implementation methods
 
     private org.apache.qpid.protonj2.engine.Session configureSession(org.apache.qpid.protonj2.engine.Session protonSession) {
@@ -529,6 +651,31 @@ public class ClientSession implements Session {
         }
 
         return nextReceiverSelector;
+    }
+
+    private ThreadPoolExecutor createExecutor(final String threadNameSuffix, AtomicReference<Thread> threadTracker) {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 5, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
+            new TrackableThreadFactory("Client Session ["+ sessionId + "] " + threadNameSuffix, true, threadTracker));
+
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy() {
+
+            @Override
+            public void rejectedExecution(Runnable r, ThreadPoolExecutor e) {
+                // Completely ignore the task if the session has closed.
+                if (!isClosed()) {
+                    LOG.trace("Task {} rejected from executor: {}", r, e);
+                    super.rejectedExecution(r, e);
+                }
+            }
+        });
+
+        return executor;
+    }
+
+    void checkIsDeliveryThread() {
+        if (Thread.currentThread().equals(deliveryThread.get())) {
+            throw new IllegalStateException("Illegal invocation from session delivery thread");
+        }
     }
 
     //----- Handle Events from the Proton Session

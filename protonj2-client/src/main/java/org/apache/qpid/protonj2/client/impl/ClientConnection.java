@@ -40,6 +40,8 @@ import org.apache.qpid.protonj2.client.ConnectionEvent;
 import org.apache.qpid.protonj2.client.ConnectionOptions;
 import org.apache.qpid.protonj2.client.DisconnectionEvent;
 import org.apache.qpid.protonj2.client.ErrorCondition;
+import org.apache.qpid.protonj2.client.Listener;
+import org.apache.qpid.protonj2.client.ListenerOptions;
 import org.apache.qpid.protonj2.client.Message;
 import org.apache.qpid.protonj2.client.NextReceiverPolicy;
 import org.apache.qpid.protonj2.client.Receiver;
@@ -373,6 +375,60 @@ public final class ClientConnection implements Connection {
         });
 
         return request(this, createRequest);
+    }
+
+    @Override
+    public Listener openListener(String address) throws ClientException {
+        return openListener(address, null);
+    }
+
+    @Override
+    public Listener openListener(String address, ListenerOptions listenerOptions) throws ClientException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Listener openDurableListener(String address, String subscriptionName) throws ClientException {
+        return openDurableListener(address, subscriptionName, null);
+    }
+
+    @Override
+    public Listener openDurableListener(String address, String subscriptionName, ListenerOptions listenerOptions) throws ClientException {
+        // TODO Auto-generated method stub
+        return null;
+    }
+
+    @Override
+    public Listener openDynamicListener() throws ClientException {
+        return openDynamicListener(null, null);
+    }
+
+    @Override
+    public Listener openDynamicListener(Map<String, Object> dynamicNodeProperties) throws ClientException {
+        return openDynamicListener(dynamicNodeProperties, null);
+    }
+
+    @Override
+    public Listener openDynamicListener(ListenerOptions listenerOptions) throws ClientException {
+        return openDynamicListener(null, listenerOptions);
+    }
+
+    @Override
+    public Listener openDynamicListener(Map<String, Object> dynamicNodeProperties, ListenerOptions listenerOptions) throws ClientException {
+        checkClosedOrFailed();
+        final ClientFuture<Listener> createReceiver = getFutureFactory().createFuture();
+
+        executor.execute(() -> {
+            try {
+                checkClosedOrFailed();
+                createReceiver.complete(lazyCreateConnectionSession().openDynamicListener(dynamicNodeProperties, listenerOptions));
+            } catch (Throwable error) {
+                createReceiver.failed(ClientExceptionSupport.createNonFatalOrPassthrough(error));
+            }
+        });
+
+        return request(this, createReceiver);
     }
 
     @Override

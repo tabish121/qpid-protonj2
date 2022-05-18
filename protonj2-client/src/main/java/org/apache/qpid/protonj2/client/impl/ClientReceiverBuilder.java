@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.qpid.protonj2.client.LinkOptions;
+import org.apache.qpid.protonj2.client.ListenerOptions;
 import org.apache.qpid.protonj2.client.ReceiverOptions;
 import org.apache.qpid.protonj2.client.SessionOptions;
 import org.apache.qpid.protonj2.client.SourceOptions;
@@ -48,6 +49,7 @@ final class ClientReceiverBuilder {
     private final AtomicInteger receiverCounter = new AtomicInteger();
 
     private volatile ReceiverOptions defaultReceiverOptions;
+    private volatile ListenerOptions defaultListenerOptions;
     private volatile StreamReceiverOptions defaultStreamReceiverOptions;
 
     ClientReceiverBuilder(ClientSession session) {
@@ -66,6 +68,17 @@ final class ClientReceiverBuilder {
         return new ClientReceiver(session, rcvOptions, receiverId, protonReceiver);
     }
 
+    public ClientListener listener(String address, ListenerOptions listenerOptions) throws ClientException {
+        final ListenerOptions options = listenerOptions != null ? listenerOptions : getDefaultListenerOptions();
+        final String receiverId = nextReceiverId();
+        final Receiver protonReceiver = createReceiver(address, options, receiverId);
+
+        protonReceiver.setSource(createSource(address, options));
+        protonReceiver.setTarget(createTarget(address, options));
+
+        return new ClientListener(session, options, receiverId, protonReceiver);
+    }
+
     public ClientReceiver durableReceiver(String address, String subscriptionName, ReceiverOptions receiverOptions) {
         final ReceiverOptions options = receiverOptions != null ? receiverOptions : getDefaultReceiverOptions();
         final String receiverId = nextReceiverId();
@@ -78,6 +91,20 @@ final class ClientReceiverBuilder {
         protonReceiver.setTarget(createTarget(address, options));
 
         return new ClientReceiver(session, options, receiverId, protonReceiver);
+    }
+
+    public ClientListener durableListener(String address, String subscriptionName, ListenerOptions listenerOptions) {
+        final ListenerOptions options = listenerOptions != null ? listenerOptions : getDefaultListenerOptions();
+        final String receiverId = nextReceiverId();
+
+        options.linkName(subscriptionName);
+
+        final Receiver protonReceiver = createReceiver(address, options, receiverId);
+
+        protonReceiver.setSource(createDurableSource(address, options));
+        protonReceiver.setTarget(createTarget(address, options));
+
+        return new ClientListener(session, options, receiverId, protonReceiver);
     }
 
     public ClientReceiver dynamicReceiver(Map<String, Object> dynamicNodeProperties, ReceiverOptions receiverOptions) throws ClientException {
@@ -93,6 +120,21 @@ final class ClientReceiverBuilder {
         protonReceiver.getSource().setDynamicNodeProperties(ClientConversionSupport.toSymbolKeyedMap(dynamicNodeProperties));
 
         return new ClientReceiver(session, options, receiverId, protonReceiver);
+    }
+
+    public ClientListener dynamicListener(Map<String, Object> dynamicNodeProperties, ListenerOptions listenerOptions) throws ClientException {
+        final ListenerOptions options = listenerOptions != null ? listenerOptions : getDefaultListenerOptions();
+        final String receiverId = nextReceiverId();
+        final Receiver protonReceiver = createReceiver(null, options, receiverId);
+
+        protonReceiver.setSource(createSource(null, options));
+        protonReceiver.setTarget(createTarget(null, options));
+
+        // Configure the dynamic nature of the source now.
+        protonReceiver.getSource().setDynamic(true);
+        protonReceiver.getSource().setDynamicNodeProperties(ClientConversionSupport.toSymbolKeyedMap(dynamicNodeProperties));
+
+        return new ClientListener(session, options, receiverId, protonReceiver);
     }
 
     public ClientStreamReceiver streamReceiver(String address, StreamReceiverOptions receiverOptions) throws ClientException {
@@ -259,6 +301,29 @@ final class ClientReceiverBuilder {
         }
 
         return receiverOptions;
+    }
+
+    /*
+     * Listener options used when none specified by the caller creating a new receiver.
+     */
+    private ListenerOptions getDefaultListenerOptions() {
+        ListenerOptions listenerOptions = defaultListenerOptions;
+        if (listenerOptions == null) {
+            synchronized (this) {
+                listenerOptions = defaultListenerOptions;
+                if (listenerOptions == null) {
+                    listenerOptions = new ListenerOptions();
+                    listenerOptions.openTimeout(sessionOptions.openTimeout());
+                    listenerOptions.closeTimeout(sessionOptions.closeTimeout());
+                    listenerOptions.requestTimeout(sessionOptions.requestTimeout());
+                    listenerOptions.drainTimeout(sessionOptions.drainTimeout());
+                }
+
+                defaultListenerOptions = listenerOptions;
+            }
+        }
+
+        return listenerOptions;
     }
 
     /*

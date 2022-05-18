@@ -276,6 +276,111 @@ public interface Connection extends AutoCloseable {
     StreamReceiver openStreamReceiver(String address, StreamReceiverOptions receiverOptions) throws ClientException;
 
     /**
+     * Creates a listener used to consume messages from the given node address.
+     *
+     * @param address
+     *            The source address to attach the listener to.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openListener(String address) throws ClientException;
+
+    /**
+     * Creates a listener used to consume messages from the given node address.
+     *
+     * @param address
+     *            The source address to attach the listener to.
+     * @param listenerOptions
+     *            The options for this listener.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openListener(String address, ListenerOptions listenerOptions) throws ClientException;
+
+    /**
+     * Creates a listener used to consume messages from the given node address and configure it
+     * such that the remote create a durable node.
+     *
+     * @param address
+     * 			The source address to attach the listener to.
+     * @param subscriptionName
+     * 			The name to give the subscription (link name).
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDurableListener(String address, String subscriptionName) throws ClientException;
+
+    /**
+     * Creates a listener used to consume messages from the given node address and configure it
+     * such that the remote create a durable node.
+     *
+     * @param address
+     *            The source address to attach the listener to.
+     * @param subscriptionName
+     * 			The name to give the subscription (link name).
+     * @param listenerOptions
+     *            The options for this listener.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDurableListener(String address, String subscriptionName, ListenerOptions listenerOptions) throws ClientException;
+
+    /**
+     * Creates a dynamic listener used to consume messages from the given node address.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDynamicListener() throws ClientException;
+
+    /**
+     * Creates a dynamic listener used to consume messages from the given node address.
+     *
+     * @param dynamicNodeProperties
+     * 		The dynamic node properties to be applied to the node created by the remote.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDynamicListener(Map<String, Object> dynamicNodeProperties) throws ClientException;
+
+    /**
+     * Creates a dynamic listener used to consume messages from the given node address.
+     *
+     * @param listenerOptions
+     * 		The options for this listener.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDynamicListener(ListenerOptions listenerOptions) throws ClientException;
+
+    /**
+     * Creates a dynamic listener used to consume messages from the given node address.
+     *
+     * @param dynamicNodeProperties
+     * 		The dynamic node properties to be applied to the node created by the remote.
+     * @param listenerOptions
+     *      The options for this listener.
+     *
+     * @return the newly created {@link Listener}
+     *
+     * @throws ClientException if an internal error occurs.
+     */
+    Listener openDynamicListener(Map<String, Object> dynamicNodeProperties, ListenerOptions listenerOptions) throws ClientException;
+
+    /**
      * Returns the default anonymous sender used by this {@link Connection} for {@link #send(Message)}
      * calls.  If the sender has not been created yet this call will initiate its creation and open with
      * the remote peer.
