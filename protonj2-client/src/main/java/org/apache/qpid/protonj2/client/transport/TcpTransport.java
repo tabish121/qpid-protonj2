@@ -27,31 +27,26 @@ import org.apache.qpid.protonj2.buffer.ProtonBuffer;
 import org.apache.qpid.protonj2.buffer.ProtonBufferAllocator;
 import org.apache.qpid.protonj2.buffer.ProtonBufferComponent;
 import org.apache.qpid.protonj2.buffer.ProtonBufferComponentAccessor;
-import org.apache.qpid.protonj2.buffer.netty.Netty4ProtonBufferAllocator;
-import org.apache.qpid.protonj2.buffer.netty.Netty4ToProtonBufferAdapter;
+import org.apache.qpid.protonj2.buffer.netty.Netty5ProtonBufferAllocator;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.apache.qpid.protonj2.client.util.IOExceptionSupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.ChannelPromise;
-import io.netty.channel.FixedRecvByteBufAllocator;
-import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.ssl.SslHandler;
-import io.netty.util.ReferenceCountUtil;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
+import io.netty5.bootstrap.Bootstrap;
+import io.netty5.buffer.Buffer;
+import io.netty5.channel.Channel;
+import io.netty5.channel.ChannelHandler;
+import io.netty5.channel.ChannelHandlerContext;
+import io.netty5.channel.ChannelInitializer;
+import io.netty5.channel.ChannelOption;
+import io.netty5.channel.ChannelPipeline;
+import io.netty5.channel.SimpleChannelInboundHandler;
+import io.netty5.handler.logging.LoggingHandler;
+import io.netty5.handler.ssl.SslHandler;
+import io.netty5.util.concurrent.Future;
+import io.netty5.util.concurrent.FutureListener;
 
 /**
  * TCP based transport that uses Netty as the underlying IO layer.
@@ -72,7 +67,7 @@ public class TcpTransport implements Transport {
     protected String host;
     protected int port;
     protected TransportListener listener;
-    protected Netty4ProtonBufferAllocator nettyAllocator;
+    protected Netty5ProtonBufferAllocator nettyAllocator;
 
     /**
      * Create a new {@link TcpTransport} instance with the given configuration.
@@ -137,7 +132,7 @@ public class TcpTransport implements Transport {
             @Override
             public void initChannel(Channel transportChannel) throws Exception {
                 channel = transportChannel;
-                nettyAllocator = new Netty4ProtonBufferAllocator(channel.alloc());
+                nettyAllocator = new Netty5ProtonBufferAllocator(channel.bufferAllocator());
 
                 configureChannel(transportChannel);
                 try {
@@ -152,7 +147,15 @@ public class TcpTransport implements Transport {
 
         configureNetty(bootstrap, options);
 
-        bootstrap.connect(getHost(), getPort()).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
+        bootstrap.connect(getHost(), getPort()).addListener(new FutureListener<Channel>() {
+
+            @Override
+            public void operationComplete(Future<? extends Channel> future) throws Exception {
+                if (future.isFailed()) {
+                    bootstrap.config().group().execute(() -> handleTransportFailure(channel, future.cause()));
+                }
+            }
+        });
 
         return this;
     }
@@ -195,7 +198,11 @@ public class TcpTransport implements Transport {
             connected.set(false);
             connectedLatch.countDown();
             if (channel != null) {
-                channel.close().syncUninterruptibly();
+                try {
+                    channel.close().asStage().await();
+                } catch (InterruptedException e) {
+                    Thread.interrupted();
+                }
             }
         }
     }
@@ -214,23 +221,7 @@ public class TcpTransport implements Transport {
     public TcpTransport write(ProtonBuffer output, Runnable onComplete) throws IOException {
         checkConnected(output);
         LOG.trace("Attempted write of buffer: {}", output);
-        final ChannelPromise promise;
-
-        if (onComplete == null) {
-            promise = channel.voidPromise();
-        } else {
-            promise = channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
-
-                @Override
-                public void operationComplete(Future<? super Void> future) throws Exception {
-                    if (future.isSuccess()) {
-                        onComplete.run();
-                    }
-                }
-            });
-        }
-
-        return writeOutputBuffer(output, false, promise);
+        return writeOutputBuffer(output, false, onComplete);
     }
 
     @Override
@@ -242,23 +233,7 @@ public class TcpTransport implements Transport {
     public TcpTransport writeAndFlush(ProtonBuffer output, Runnable onComplete) throws IOException {
         checkConnected(output);
         LOG.trace("Attempted write and flush of buffer: {}", output);
-        final ChannelPromise promise;
-
-        if (onComplete == null) {
-            promise = channel.voidPromise();
-        } else {
-            promise = channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
-
-                @Override
-                public void operationComplete(Future<? super Void> future) throws Exception {
-                    if (future.isSuccess()) {
-                        onComplete.run();
-                    }
-                }
-            });
-        }
-
-        return writeOutputBuffer(output, true, promise);
+        return writeOutputBuffer(output, true, onComplete);
     }
 
     @Override
@@ -296,33 +271,18 @@ public class TcpTransport implements Transport {
         return result;
     }
 
-    protected final ByteBuf toOutputBuffer(final ProtonBuffer output) throws IOException {
-        final ByteBuf nettyBuf;
-
-        if (output instanceof Netty4ToProtonBufferAdapter) {
-            nettyBuf = ((Netty4ToProtonBufferAdapter) output).unwrapAndRelease();
-        } else {
-            try (output) {
-                Netty4ToProtonBufferAdapter wrapped = nettyAllocator.outputBuffer(output.getReadableBytes());
-                wrapped.writeBytes(output);
-                nettyBuf = wrapped.unwrap();
-            }
-        }
-
-        return nettyBuf;
-    }
-
-    private TcpTransport writeOutputBuffer(final ProtonBuffer buffer, boolean flush, ChannelPromise promise) {
+    private TcpTransport writeOutputBuffer(final ProtonBuffer buffer, boolean flush, Runnable onComplete) {
         int writeCount = buffer.componentCount();
+        Future<Void> writeFuture = null;
 
         try (ProtonBuffer ioBuffer = buffer; ProtonBufferComponentAccessor accessor = buffer.componentAccessor()) {
             for (ProtonBufferComponent output = accessor.firstReadable(); output != null; output = accessor.nextReadable()) {
-                final ByteBuf nettyBuf;
+                final Buffer nettyBuf;
 
-                if (output instanceof Netty4ToProtonBufferAdapter) {
-                    nettyBuf = ((Netty4ToProtonBufferAdapter)output).unwrapAndRelease();
+                if (output.unwrap() instanceof Buffer) {
+                    nettyBuf = ((Buffer) output.unwrap()).send().receive();
                 } else {
-                    nettyBuf = channel.alloc().ioBuffer(output.getReadableBytes());
+                    nettyBuf = channel.bufferAllocator().allocate(output.getReadableBytes());
                     if (output.hasReadbleArray()) {
                         nettyBuf.writeBytes(output.getReadableArray(), output.getReadableArrayOffset(), output.getReadableBytes());
                     } else {
@@ -330,19 +290,25 @@ public class TcpTransport implements Transport {
                     }
                 }
 
-                if (--writeCount > 0) {
-                    channel.write(nettyBuf, channel.voidPromise());
+                if (--writeCount == 0 && flush) {
+                    writeFuture = channel.writeAndFlush(nettyBuf);
                 } else {
-                    if (flush) {
-                        channel.writeAndFlush(nettyBuf, promise);
-                    } else {
-                        channel.write(nettyBuf, promise);
-                    }
+                    writeFuture = channel.write(nettyBuf);
                 }
+            }
+
+            if (onComplete != null) {
+                writeFuture.addListener(onComplete, TcpTransport::handleWriteComplete);
             }
         }
 
         return this;
+    }
+
+    private static void handleWriteComplete(Runnable onComplete, Future<? extends Void> future) {
+        if (future.isSuccess()) {
+            onComplete.run();
+        }
     }
 
     //----- Internal implementation details, can be overridden as needed -----//
@@ -351,7 +317,7 @@ public class TcpTransport implements Transport {
 
     }
 
-    protected ChannelInboundHandlerAdapter createChannelHandler() {
+    protected ChannelHandler createChannelHandler() {
         return new NettyTcpTransportHandler();
     }
 
@@ -374,10 +340,10 @@ public class TcpTransport implements Transport {
             connectedLatch.countDown();
 
             LOG.trace("Firing onTransportError listener");
-            if (channel.eventLoop().inEventLoop()) {
+            if (channel.executor().inEventLoop()) {
                 listener.transportError(failureCause);
             } else {
-                channel.eventLoop().execute(() -> {
+                channel.executor().execute(() -> {
                     listener.transportError(failureCause);
                 });
             }
@@ -396,9 +362,7 @@ public class TcpTransport implements Transport {
 
     private void checkConnected(ProtonBuffer output) throws IOException {
         if (!connected.get() || !channel.isActive()) {
-            if (output instanceof Netty4ToProtonBufferAdapter) {
-                ReferenceCountUtil.release(output.unwrap());
-            }
+            output.close();
             throw new IOException("Cannot send to a non-connected transport.", failureCause);
         }
     }
@@ -415,7 +379,6 @@ public class TcpTransport implements Transport {
 
         if (options.receiveBufferSize() != -1) {
             bootstrap.option(ChannelOption.SO_RCVBUF, options.receiveBufferSize());
-            bootstrap.option(ChannelOption.RCVBUF_ALLOCATOR, new FixedRecvByteBufAllocator(options.receiveBufferSize()));
         }
 
         if (options.trafficClass() != -1) {
@@ -435,7 +398,7 @@ public class TcpTransport implements Transport {
         if (isSecure()) {
             final SslHandler sslHandler;
             try {
-                sslHandler = SslSupport.createSslHandler(channel.alloc(), host, port, sslOptions);
+                sslHandler = SslSupport.createSslHandler(channel.bufferAllocator(), host, port, sslOptions);
             } catch (Exception ex) {
                 LOG.warn("Error during initialization of channel from SSL Handler creation:");
                 handleTransportFailure(channel, IOExceptionSupport.create(ex));
@@ -475,9 +438,9 @@ public class TcpTransport implements Transport {
                 handleConnected(context.channel());
             } else {
                 SslHandler sslHandler = context.pipeline().get(SslHandler.class);
-                sslHandler.handshakeFuture().addListener(new GenericFutureListener<Future<Channel>>() {
+                sslHandler.handshakeFuture().addListener(new FutureListener<Channel>() {
                     @Override
-                    public void operationComplete(Future<Channel> future) throws Exception {
+                    public void operationComplete(Future<? extends Channel> future) throws Exception {
                         if (future.isSuccess()) {
                             LOG.trace("SSL Handshake has completed: {}", channel);
                             handleConnected(channel);
@@ -501,11 +464,11 @@ public class TcpTransport implements Transport {
         }
 
         @Override
-        public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
+        public void channelExceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
             handleTransportFailure(context.channel(), cause);
         }
 
-        protected void dispatchReadBuffer(ByteBuf buffer) throws Exception {
+        protected void dispatchReadBuffer(Buffer buffer) throws Exception {
             LOG.trace("New data read: {}", buffer);
 
             // Wrap the buffer and make it read-only as the handlers should not be altering the
@@ -522,10 +485,10 @@ public class TcpTransport implements Transport {
 
     //----- Handle binary data over socket connections -----------------------//
 
-    protected class NettyTcpTransportHandler extends NettyDefaultHandler<ByteBuf> {
+    protected class NettyTcpTransportHandler extends NettyDefaultHandler<Buffer> {
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, Buffer buffer) throws Exception {
             dispatchReadBuffer(buffer);
         }
     }

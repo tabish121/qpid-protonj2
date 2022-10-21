@@ -228,7 +228,9 @@ public class SslTransportTest extends TcpTransportTest {
             assertTrue(transport.isSecure());
 
             // Verify there was a certificate sent to the server
-            assertTrue(server.getSslHandler().handshakeFuture().await(2, TimeUnit.SECONDS), "Server handshake did not complete in allotted time");
+            server.getSslHandler().handshakeFuture().asStage().await(2, TimeUnit.SECONDS);
+
+            assertTrue(server.getSslHandler().handshakeFuture().isSuccess(), "Server handshake did not complete in allotted time");
             assertNotNull(server.getSslHandler().engine().getSession().getPeerCertificates());
 
             transport.close();
@@ -269,7 +271,9 @@ public class SslTransportTest extends TcpTransportTest {
             assertTrue(transport.isConnected());
             assertTrue(transport.isSecure());
 
-            assertTrue(server.getSslHandler().handshakeFuture().await(2, TimeUnit.SECONDS), "Server handshake did not complete in allotted time");
+            server.getSslHandler().handshakeFuture().asStage().await(2, TimeUnit.SECONDS);
+
+            assertTrue(server.getSslHandler().handshakeFuture().isSuccess(), "Server handshake did not complete in allotted time");
 
             Certificate[] peerCertificates = server.getSslHandler().engine().getSession().getPeerCertificates();
             assertNotNull(peerCertificates);

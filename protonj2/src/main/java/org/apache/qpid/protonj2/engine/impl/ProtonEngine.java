@@ -17,8 +17,9 @@
 package org.apache.qpid.protonj2.engine.impl;
 
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -32,6 +33,7 @@ import org.apache.qpid.protonj2.engine.EngineState;
 import org.apache.qpid.protonj2.engine.EventHandler;
 import org.apache.qpid.protonj2.engine.HeaderEnvelope;
 import org.apache.qpid.protonj2.engine.OutgoingAMQPEnvelope;
+import org.apache.qpid.protonj2.engine.Scheduler;
 import org.apache.qpid.protonj2.engine.exceptions.EngineFailedException;
 import org.apache.qpid.protonj2.engine.exceptions.EngineNotStartedException;
 import org.apache.qpid.protonj2.engine.exceptions.EngineNotWritableException;
@@ -71,8 +73,8 @@ public class ProtonEngine implements Engine {
     private int outputSequence;
 
     // Idle Timeout Check data
-    private ScheduledFuture<?> nextIdleTimeoutCheck;
-    private ScheduledExecutorService idleTimeoutExecutor;
+    private Future<?> nextIdleTimeoutCheck;
+    private Scheduler idleTimeoutExecutor;
     private int lastInputSequence;
     private int lastOutputSequence;
     private long localIdleDeadline = 0;
@@ -188,6 +190,39 @@ public class ProtonEngine implements Engine {
 
     @Override
     public ProtonEngine tickAuto(ScheduledExecutorService executor) throws IllegalStateException, EngineStateException {
+        return tickAuto(new Scheduler() {
+
+            private final ScheduledExecutorService service = executor;
+
+            @Override
+            public void execute(Runnable command) {
+                service.execute(command);
+            }
+
+            @Override
+            public Future<?> schedule(Runnable command, long delay, TimeUnit unit) {
+                return service.schedule(command, delay, unit);
+            }
+
+            @Override
+            public <V> Future<V> schedule(Callable<V> task, long delay, TimeUnit unit) {
+                return service.schedule(task, delay, unit);
+            }
+
+            @Override
+            public Future<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
+                return service.scheduleAtFixedRate(command, initialDelay, period, unit);
+            }
+
+            @Override
+            public Future<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
+                return service.scheduleWithFixedDelay(command, initialDelay, delay, unit);
+            }
+        });
+    }
+
+    @Override
+    public ProtonEngine tickAuto(Scheduler executor) throws IllegalStateException, EngineStateException {
         checkShutdownOrFailed("Cannot start auto tick on an Engine that has been shutdown or failed");
 
         Objects.requireNonNull(executor);

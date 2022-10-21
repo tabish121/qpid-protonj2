@@ -47,7 +47,7 @@
     <slf4j.version>1.7.36</slf4j.version>
     <hamcrest.version>2.2</hamcrest.version>
     <netty.version>4.1.84.Final</netty.version>
-    <netty.iouring.version>0.0.15.Final</netty.iouring.version>
+    <netty5.iouring.version>0.0.15.Final</netty5.iouring.version>
     <netty5.version>5.0.0.Alpha5</netty5.version>
     <netty.tcnative.version>2.0.54.Final</netty.tcnative.version>
 
@@ -59,9 +59,9 @@
     <surefire.runOrder>filesystem</surefire.runOrder>
     <proton.trace.frames>false</proton.trace.frames>
 
-    <netty-transport-native-io-uring-classifier>linux-x86_64</netty-transport-native-io-uring-classifier>
-    <netty-transport-native-epoll-classifier>linux-x86_64</netty-transport-native-epoll-classifier>
-    <netty-transport-native-kqueue-classifier>osx-x86_64</netty-transport-native-kqueue-classifier>
+    <netty5-transport-native-io-uring-classifier>linux-x86_64</netty5-transport-native-io-uring-classifier>
+    <netty5-transport-native-epoll-classifier>linux-x86_64</netty5-transport-native-epoll-classifier>
+    <netty5-transport-native-kqueue-classifier>osx-x86_64</netty5-transport-native-kqueue-classifier>
 
     <!-- surefire forked jvm arguments -->
     <argLine>-Xmx2g -enableassertions ${jacoco-config}</argLine>
@@ -133,41 +133,41 @@
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-common</artifactId>
-        <version>${netty.version}</version>
+        <artifactId>netty5-common</artifactId>
+        <version>${netty5.version}</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-handler</artifactId>
-        <version>${netty.version}</version>
+        <artifactId>netty5-handler</artifactId>
+        <version>${netty5.version}</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-transport</artifactId>
-        <version>${netty.version}</version>
+        <artifactId>netty5-transport</artifactId>
+        <version>${netty5.version}</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-codec-http</artifactId>
-        <version>${netty.version}</version>
+        <artifactId>netty5-codec-http</artifactId>
+        <version>${netty5.version}</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-transport-native-epoll</artifactId>
-        <version>${netty.version}</version>
-        <classifier>${netty-transport-native-epoll-classifier}</classifier>
+        <artifactId>netty5-transport-native-epoll</artifactId>
+        <version>${netty5.version}</version>
+        <classifier>${netty5-transport-native-epoll-classifier}</classifier>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
-        <artifactId>netty-transport-native-kqueue</artifactId>
-        <version>${netty.version}</version>
-        <classifier>${netty-transport-native-kqueue-classifier}</classifier>
+        <artifactId>netty5-transport-native-kqueue</artifactId>
+        <version>${netty5.version}</version>
+        <classifier>${netty5-transport-native-kqueue-classifier}</classifier>
       </dependency>
       <dependency>
         <groupId>io.netty.incubator</groupId>
         <artifactId>netty-incubator-transport-native-io_uring</artifactId>
-        <version>${netty.iouring.version}</version>
-        <classifier>${netty-transport-native-io-uring-classifier}</classifier>
+        <version>${netty5.iouring.version}</version>
+        <classifier>${netty5-transport-native-io-uring-classifier}</classifier>
       </dependency>
       <!--  Testing only Uber Jar inclusion -->
       <dependency>

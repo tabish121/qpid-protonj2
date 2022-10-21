@@ -22,34 +22,35 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.qpid.protonj2.buffer.ProtonBuffer;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelPipeline;
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpObjectAggregator;
-import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.ContinuationWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.WebSocketClientHandshaker;
-import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
-import io.netty.handler.codec.http.websocketx.WebSocketVersion;
-import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.concurrent.ScheduledFuture;
+import io.netty5.bootstrap.Bootstrap;
+import io.netty5.buffer.Buffer;
+import io.netty5.channel.Channel;
+import io.netty5.channel.ChannelHandler;
+import io.netty5.channel.ChannelHandlerAdapter;
+import io.netty5.channel.ChannelHandlerContext;
+import io.netty5.channel.ChannelPipeline;
+import io.netty5.handler.codec.http.DefaultHttpContent;
+import io.netty5.handler.codec.http.FullHttpResponse;
+import io.netty5.handler.codec.http.HttpClientCodec;
+import io.netty5.handler.codec.http.HttpObjectAggregator;
+import io.netty5.handler.codec.http.headers.HttpHeaders;
+import io.netty5.handler.codec.http.websocketx.BinaryWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.CloseWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.ContinuationWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.PingWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.PongWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.TextWebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.WebSocketClientHandshaker;
+import io.netty5.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
+import io.netty5.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty5.handler.codec.http.websocketx.WebSocketVersion;
+import io.netty5.util.concurrent.Future;
+import io.netty5.util.concurrent.FutureListener;
 
 /**
  * Netty based WebSockets Transport that wraps and extends the TCP Transport.
@@ -60,7 +61,7 @@ public class WebSocketTransport extends TcpTransport {
 
     private static final String AMQP_SUB_PROTOCOL = "amqp";
 
-    private ScheduledFuture<?> handshakeTimeoutFuture;
+    private Future<Void> handshakeTimeoutFuture;
 
     /**
      * Create a new {@link WebSocketTransport} instance with the given configuration.
@@ -77,60 +78,6 @@ public class WebSocketTransport extends TcpTransport {
     }
 
     @Override
-    public WebSocketTransport write(ProtonBuffer output, Runnable onComplete) throws IOException {
-        checkConnected();
-        int length = output.getReadableBytes();
-        if (length == 0) {
-            return this;
-        }
-
-        LOG.trace("Attempted write of: {} bytes", length);
-
-        if (onComplete == null) {
-            channel.write(new BinaryWebSocketFrame(toOutputBuffer(output)), channel.voidPromise());
-        } else {
-            channel.write(new BinaryWebSocketFrame(toOutputBuffer(output)), channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
-
-                @Override
-                public void operationComplete(Future<? super Void> future) throws Exception {
-                    if (future.isSuccess()) {
-                        onComplete.run();
-                    }
-                }
-            }));
-        }
-
-        return this;
-    }
-
-    @Override
-    public WebSocketTransport writeAndFlush(ProtonBuffer output, Runnable onComplete) throws IOException {
-        checkConnected();
-        int length = output.getReadableBytes();
-        if (length == 0) {
-            return this;
-        }
-
-        LOG.trace("Attempted write and flush of: {} bytes", length);
-
-        if (onComplete == null) {
-            channel.writeAndFlush(new BinaryWebSocketFrame(toOutputBuffer(output)), channel.voidPromise());
-        } else {
-            channel.writeAndFlush(new BinaryWebSocketFrame(toOutputBuffer(output)), channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
-
-                @Override
-                public void operationComplete(Future<? super Void> future) throws Exception {
-                    if (future.isSuccess()) {
-                        onComplete.run();
-                    }
-                }
-            }));
-        }
-
-        return this;
-    }
-
-    @Override
     public URI getRemoteURI() {
         if (host != null) {
             try {
@@ -143,14 +90,14 @@ public class WebSocketTransport extends TcpTransport {
     }
 
     @Override
-    protected ChannelInboundHandlerAdapter createChannelHandler() {
+    protected ChannelHandler createChannelHandler() {
         return new NettyWebSocketTransportHandler();
     }
 
     @Override
     protected void addAdditionalHandlers(ChannelPipeline pipeline) {
         pipeline.addLast(new HttpClientCodec());
-        pipeline.addLast(new HttpObjectAggregator(8192));
+        pipeline.addLast(new HttpObjectAggregator<DefaultHttpContent>(8192));
     }
 
     @Override
@@ -165,12 +112,20 @@ public class WebSocketTransport extends TcpTransport {
 
     //----- Handle connection events -----------------------------------------//
 
-    private class NettyWebSocketTransportHandler extends NettyDefaultHandler<Object> {
+    private class OutputBufferToBinaryFrameHandler extends ChannelHandlerAdapter {
+
+        @Override
+        public Future<Void> write(ChannelHandlerContext ctx, Object msg) {
+            return ctx.write(new BinaryWebSocketFrame((Buffer) msg));
+        }
+    }
+
+    private class NettyWebSocketTransportHandler extends NettyDefaultHandler<Object> implements ChannelHandler {
 
         private final WebSocketClientHandshaker handshaker;
 
         public NettyWebSocketTransportHandler() {
-            DefaultHttpHeaders headers = new DefaultHttpHeaders();
+            HttpHeaders headers = HttpHeaders.newHeaders();
 
             options.webSocketHeaders().forEach((key, value) -> {
                 headers.set(key, value);
@@ -184,7 +139,7 @@ public class WebSocketTransport extends TcpTransport {
         @Override
         public void channelInactive(ChannelHandlerContext context) throws Exception {
             if (handshakeTimeoutFuture != null) {
-                handshakeTimeoutFuture.cancel(false);
+                handshakeTimeoutFuture.cancel();
             }
 
             super.channelInactive(context);
@@ -192,7 +147,17 @@ public class WebSocketTransport extends TcpTransport {
 
         @Override
         public void channelActive(ChannelHandlerContext context) throws Exception {
-            handshaker.handshake(context.channel());
+            handshaker.handshake(context.channel()).addListener(new FutureListener<Void>() {
+
+                @Override
+                public void operationComplete(Future<? extends Void> future) throws Exception {
+                    if (future.isSuccess()) {
+                        // Now we can add a transformer for outbound buffers that will produce
+                        // binary websocket frame wrappers to ensure our writes are encoded.
+                        context.pipeline().addLast(new OutputBufferToBinaryFrameHandler());
+                    }
+                }
+            });
 
             handshakeTimeoutFuture = context.executor().schedule(()-> {
                 LOG.trace("WebSocket handshake timed out! Channel is {}", context.channel());
@@ -205,7 +170,7 @@ public class WebSocketTransport extends TcpTransport {
         }
 
         @Override
-        protected void channelRead0(ChannelHandlerContext ctx, Object message) throws Exception {
+        protected void messageReceived(ChannelHandlerContext ctx, Object message) throws Exception {
             LOG.trace("New data read: incoming: {}", message);
 
             Channel ch = ctx.channel();
@@ -213,7 +178,7 @@ public class WebSocketTransport extends TcpTransport {
                 handshaker.finishHandshake(ch, (FullHttpResponse) message);
                 LOG.trace("WebSocket Client connected! {}", ctx.channel());
                 // Now trigger super processing as we are really connected.
-                if (handshakeTimeoutFuture.cancel(false)) {
+                if (handshakeTimeoutFuture.cancel()) {
                     WebSocketTransport.super.handleConnected(ch);
                 }
 
@@ -225,25 +190,25 @@ public class WebSocketTransport extends TcpTransport {
                 FullHttpResponse response = (FullHttpResponse) message;
                 throw new IllegalStateException(
                     "Unexpected FullHttpResponse (getStatus=" + response.status() +
-                    ", content=" + response.content().toString(StandardCharsets.UTF_8) + ')');
+                    ", content=" + response.payload().toString(StandardCharsets.UTF_8) + ')');
             }
 
             WebSocketFrame frame = (WebSocketFrame) message;
             if (frame instanceof TextWebSocketFrame) {
                 TextWebSocketFrame textFrame = (TextWebSocketFrame) frame;
-                LOG.warn("WebSocket Client received message: " + textFrame.text());
-                ctx.fireExceptionCaught(new IOException("Received invalid frame over WebSocket."));
+                LOG.warn("WebSocket Client received message: {}", textFrame.text());
+                ctx.fireChannelExceptionCaught(new IOException("Received invalid frame over WebSocket."));
             } else if (frame instanceof BinaryWebSocketFrame) {
                 BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
-                LOG.trace("WebSocket Client received data: {} bytes", binaryFrame.content().readableBytes());
-                dispatchReadBuffer(binaryFrame.content());
+                LOG.trace("WebSocket Client received data: {} bytes", binaryFrame.binaryData().readableBytes());
+                dispatchReadBuffer(binaryFrame.binaryData());
             } else if (frame instanceof ContinuationWebSocketFrame) {
                 ContinuationWebSocketFrame continuationFrame = (ContinuationWebSocketFrame) frame;
-                LOG.trace("WebSocket Client received data continuation: {} bytes", continuationFrame.content().readableBytes());
-                dispatchReadBuffer(continuationFrame.content());
+                LOG.trace("WebSocket Client received data continuation: {} bytes", continuationFrame.binaryData().readableBytes());
+                dispatchReadBuffer(continuationFrame.binaryData());
             } else if (frame instanceof PingWebSocketFrame) {
                 LOG.trace("WebSocket Client received ping, response with pong");
-                ch.write(new PongWebSocketFrame(frame.content()));
+                ch.write(new PongWebSocketFrame(frame.binaryData()));
             } else if (frame instanceof CloseWebSocketFrame) {
                 LOG.trace("WebSocket Client received closing");
                 ch.close();

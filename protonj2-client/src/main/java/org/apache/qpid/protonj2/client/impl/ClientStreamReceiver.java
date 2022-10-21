@@ -22,7 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.qpid.protonj2.client.StreamDelivery;
@@ -46,9 +45,9 @@ public final class ClientStreamReceiver extends ClientReceiverLinkType<StreamRec
     private static final Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     private ClientFuture<StreamReceiver> drainingFuture;
-    private ScheduledFuture<?> drainingTimeout;
+    private io.netty5.util.concurrent.Future<Void> drainingTimeout;
     private final StreamReceiverOptions options;
-    private final Map<ClientFuture<StreamDelivery>, ScheduledFuture<?>> receiveRequests = new LinkedHashMap<>();
+    private final Map<ClientFuture<StreamDelivery>, io.netty5.util.concurrent.Future<Void>> receiveRequests = new LinkedHashMap<>();
 
     ClientStreamReceiver(ClientSession session, StreamReceiverOptions options, String receiverId, org.apache.qpid.protonj2.engine.Receiver receiver) {
         super(session, receiverId, options, receiver);
@@ -87,7 +86,7 @@ public final class ClientStreamReceiver extends ClientReceiverLinkType<StreamRec
                     if (timeout == 0) {
                         receive.complete(null);
                     } else {
-                        final ScheduledFuture<?> timeoutFuture;
+                        final io.netty5.util.concurrent.Future<Void> timeoutFuture;
 
                         if (timeout > 0) {
                             timeoutFuture = session.getScheduler().schedule(() -> {
@@ -212,12 +211,12 @@ public final class ClientStreamReceiver extends ClientReceiverLinkType<StreamRec
         if (delivery.getLinkedResource() == null) {
             // New delivery that can be sent to a waiting receive caller
             if (!receiveRequests.isEmpty()) {
-                Iterator<Entry<ClientFuture<StreamDelivery>, ScheduledFuture<?>>> entries =
+                Iterator<Entry<ClientFuture<StreamDelivery>, io.netty5.util.concurrent.Future<Void>>> entries =
                     receiveRequests.entrySet().iterator();
 
-                Entry<ClientFuture<StreamDelivery>, ScheduledFuture<?>> entry = entries.next();
+                Entry<ClientFuture<StreamDelivery>, io.netty5.util.concurrent.Future<Void>> entry = entries.next();
                 if (entry.getValue() != null) {
-                    entry.getValue().cancel(false);
+                    entry.getValue().cancel();
                 }
 
                 try {
@@ -267,7 +266,7 @@ public final class ClientStreamReceiver extends ClientReceiverLinkType<StreamRec
 
         receiveRequests.forEach((future, timeout) -> {
             if (timeout != null) {
-                timeout.cancel(false);
+                timeout.cancel();
             }
 
             if (failureCause != null) {
@@ -295,7 +294,7 @@ public final class ClientStreamReceiver extends ClientReceiverLinkType<StreamRec
         if (drainingFuture != null) {
             drainingFuture.complete(this);
             if (drainingTimeout != null) {
-                drainingTimeout.cancel(false);
+                drainingTimeout.cancel();
                 drainingTimeout = null;
             }
         }

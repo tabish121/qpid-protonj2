@@ -34,11 +34,11 @@ import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelHandler;
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.OpenSslEngine;
-import io.netty.handler.ssl.SslHandler;
+import io.netty5.channel.Channel;
+import io.netty5.channel.ChannelHandler;
+import io.netty5.handler.ssl.OpenSsl;
+import io.netty5.handler.ssl.OpenSslEngine;
+import io.netty5.handler.ssl.SslHandler;
 
 /**
  * Test basic functionality of the Netty based TCP Transport running in secure mode (SSL).

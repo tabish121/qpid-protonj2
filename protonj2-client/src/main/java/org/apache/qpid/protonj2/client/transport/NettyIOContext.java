@@ -17,21 +17,25 @@
 package org.apache.qpid.protonj2.client.transport;
 
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.apache.qpid.protonj2.client.util.TrackableThreadFactory;
+import org.apache.qpid.protonj2.engine.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.util.concurrent.Future;
+import io.netty5.bootstrap.Bootstrap;
+import io.netty5.channel.Channel;
+import io.netty5.channel.EventLoopGroup;
+import io.netty5.channel.MultithreadEventLoopGroup;
+import io.netty5.channel.nio.NioHandler;
+import io.netty5.channel.socket.nio.NioSocketChannel;
+import io.netty5.util.concurrent.Future;
 
 /**
  * Builder of Transport instances that will validate the build options and produce a
@@ -46,6 +50,7 @@ public final class NettyIOContext {
     private static final int ASYNC_SHUTDOWN_QUIET_PERIOD = 10;
 
     private final EventLoopGroup group;
+    private final NettyScheduler scheduler = new NettyScheduler();
     private final Class<? extends Channel> channelClass;
     private final TransportOptions options;
     private final SslOptions sslOptions;
@@ -96,7 +101,7 @@ public final class NettyIOContext {
 
         if (selectedGroup == null) {
             LOG.trace("Netty Transports will be using NIO mode");
-            selectedGroup = new NioEventLoopGroup(1, threadFactory);
+            selectedGroup = new MultithreadEventLoopGroup(1, threadFactory, NioHandler.newFactory());
             selectedChannelClass = NioSocketChannel.class;
         }
 
@@ -107,8 +112,12 @@ public final class NettyIOContext {
     public void shutdown() {
         if (!group.isShutdown()) {
             Future<?> fut = group.shutdownGracefully(0, SHUTDOWN_TIMEOUT, TimeUnit.MILLISECONDS);
-            if (!fut.awaitUninterruptibly(2 * SHUTDOWN_TIMEOUT, TimeUnit.MILLISECONDS)) {
-                LOG.trace("Connection IO Event Loop shutdown failed to complete in allotted time");
+            try {
+                if (!fut.asStage().await(2 * SHUTDOWN_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                    LOG.trace("Connection IO Event Loop shutdown failed to complete in allotted time");
+                }
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     }
@@ -128,6 +137,11 @@ public final class NettyIOContext {
         return group;
     }
 
+    // TODO Hide event loop and have a single Executor type interface
+    public Scheduler ioScheduler() {
+        return scheduler;
+    }
+
     public TcpTransport newTransport() {
         if (group.isShutdown() || group.isShuttingDown() || group.isTerminated()) {
             throw new IllegalStateException("Cannot create a Transport from a shutdown IO context");
@@ -144,5 +158,33 @@ public final class NettyIOContext {
         }
 
         return transport;
+    }
+
+    private class NettyScheduler implements Scheduler, Executor {
+
+        @Override
+        public void execute(Runnable command) {
+            eventLoop().execute(command);
+        }
+
+        @Override
+        public java.util.concurrent.Future<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            return eventLoop().schedule(command, delay, unit).asStage();
+        }
+
+        @Override
+        public <V> java.util.concurrent.Future<V> schedule(Callable<V> task, long delay, TimeUnit unit) {
+            return eventLoop().schedule(task, delay, unit).asStage();
+        }
+
+        @Override
+        public java.util.concurrent.Future<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
+            return eventLoop().scheduleAtFixedRate(command, initialDelay, period, unit).asStage();
+        }
+
+        @Override
+        public java.util.concurrent.Future<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
+            return eventLoop().scheduleWithFixedDelay(command, initialDelay, delay, unit).asStage();
+        }
     }
 }

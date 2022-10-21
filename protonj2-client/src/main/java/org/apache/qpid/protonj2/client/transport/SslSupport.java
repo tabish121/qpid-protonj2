@@ -39,14 +39,14 @@ import org.apache.qpid.protonj2.client.SslOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.OpenSslX509KeyManagerFactory;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslHandler;
-import io.netty.handler.ssl.SslProvider;
-import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.netty5.buffer.BufferAllocator;
+import io.netty5.handler.ssl.OpenSsl;
+import io.netty5.handler.ssl.OpenSslX509KeyManagerFactory;
+import io.netty5.handler.ssl.SslContext;
+import io.netty5.handler.ssl.SslContextBuilder;
+import io.netty5.handler.ssl.SslHandler;
+import io.netty5.handler.ssl.SslProvider;
+import io.netty5.handler.ssl.util.InsecureTrustManagerFactory;
 
 /**
  * Static class that provides various utility methods used by Transport implementations.
@@ -106,7 +106,7 @@ public class SslSupport {
      *
      * @throws Exception if an error occurs while creating the SslHandler instance.
      */
-    public static SslHandler createSslHandler(ByteBufAllocator allocator, String host, int port, SslOptions options) throws Exception {
+    public static SslHandler createSslHandler(BufferAllocator allocator, String host, int port, SslOptions options) throws Exception {
         final SSLEngine sslEngine;
 
         if (isOpenSSLPossible(options)) {
@@ -238,7 +238,7 @@ public class SslSupport {
      * TransportOptions instances.
      *
      * @param allocator
-     *		  the Netty ByteBufAllocator to use to create the OpenSSL engine
+     *		  the Netty BufferAllocator to use to create the OpenSSL engine
      * @param host
      *        the host name or IP address that this transport connects to.
      * @param port
@@ -252,7 +252,7 @@ public class SslSupport {
      *
      * @throws Exception if an error occurs while creating the new SSLEngine.
      */
-    public static SSLEngine createOpenSslEngine(ByteBufAllocator allocator, String host, int port, SslContext context, SslOptions options) throws Exception {
+    public static SSLEngine createOpenSslEngine(BufferAllocator allocator, String host, int port, SslContext context, SslOptions options) throws Exception {
         SSLEngine engine = null;
 
         if (allocator == null) {

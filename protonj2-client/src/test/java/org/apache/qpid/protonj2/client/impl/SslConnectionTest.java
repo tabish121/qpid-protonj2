@@ -50,7 +50,7 @@ import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.handler.ssl.OpenSsl;
+import io.netty5.handler.ssl.OpenSsl;
 
 /**
  * Test for the Connection class

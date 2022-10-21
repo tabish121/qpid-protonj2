@@ -46,7 +46,7 @@ public final class Data implements Section<byte[]> {
 
     public Data(byte[] value) {
         // Creates heap buffers that will be cleaned on GC
-        this.buffer = value != null ?PROTON_ALLOCATOR.wrap(value, 0, value.length).convertToReadOnly() : null;
+        this.buffer = value != null ? PROTON_ALLOCATOR.wrap(value, 0, value.length).convertToReadOnly() : null;
     }
 
     public Data(byte[] value, int offset, int length) {

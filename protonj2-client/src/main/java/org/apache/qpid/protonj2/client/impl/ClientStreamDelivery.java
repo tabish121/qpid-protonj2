@@ -21,7 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.qpid.protonj2.buffer.ProtonCompositeBuffer;
@@ -171,7 +171,7 @@ public final class ClientStreamDelivery extends ClientDeliverable<ClientStreamDe
         private final int INVALID_MARK = -1;
 
         private final ProtonCompositeBuffer buffer;
-        private final ScheduledExecutorService executor = receiver.session().getScheduler();
+        private final Executor executor = receiver.session().getScheduler();
         private final AtomicBoolean closed = new AtomicBoolean();
 
         private ClientFuture<Integer> readRequest;

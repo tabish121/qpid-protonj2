@@ -41,39 +41,39 @@
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-buffer</artifactId>
+      <artifactId>netty5-buffer</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-common</artifactId>
+      <artifactId>netty5-common</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-handler</artifactId>
+      <artifactId>netty5-handler</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-transport</artifactId>
+      <artifactId>netty5-transport</artifactId>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-transport-native-epoll</artifactId>
-      <classifier>${netty-transport-native-epoll-classifier}</classifier>
+      <artifactId>netty5-transport-native-epoll</artifactId>
+      <classifier>${netty5-transport-native-epoll-classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>io.netty.incubator</groupId>
       <artifactId>netty-incubator-transport-native-io_uring</artifactId>
-      <classifier>${netty-transport-native-io-uring-classifier}</classifier>
+      <classifier>${netty5-transport-native-io-uring-classifier}</classifier>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-transport-native-kqueue</artifactId>
-      <classifier>${netty-transport-native-kqueue-classifier}</classifier>
+      <artifactId>netty5-transport-native-kqueue</artifactId>
+      <classifier>${netty5-transport-native-kqueue-classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
-      <artifactId>netty-codec-http</artifactId>
+      <artifactId>netty5-codec-http</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.qpid</groupId>

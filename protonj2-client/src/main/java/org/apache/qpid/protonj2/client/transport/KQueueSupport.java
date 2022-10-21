@@ -22,11 +22,12 @@ import org.apache.qpid.protonj2.client.TransportOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.kqueue.KQueue;
-import io.netty.channel.kqueue.KQueueEventLoopGroup;
-import io.netty.channel.kqueue.KQueueSocketChannel;
+import io.netty5.channel.Channel;
+import io.netty5.channel.EventLoopGroup;
+import io.netty5.channel.MultithreadEventLoopGroup;
+import io.netty5.channel.kqueue.KQueue;
+import io.netty5.channel.kqueue.KQueueHandler;
+import io.netty5.channel.kqueue.KQueueSocketChannel;
 
 public class KQueueSupport {
 
@@ -44,7 +45,7 @@ public class KQueueSupport {
     }
 
     public static EventLoopGroup createGroup(int nThreads, ThreadFactory ioThreadFactory) {
-        return new KQueueEventLoopGroup(nThreads, ioThreadFactory);
+        return new MultithreadEventLoopGroup(nThreads, ioThreadFactory, KQueueHandler.newFactory());
     }
 
     public static Class<? extends Channel> getChannelClass() {

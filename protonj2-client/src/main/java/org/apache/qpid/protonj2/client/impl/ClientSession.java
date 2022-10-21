@@ -21,8 +21,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.function.Supplier;
@@ -49,6 +47,8 @@ import org.apache.qpid.protonj2.engine.Engine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty5.channel.EventLoopGroup;
+
 /**
  * Client implementation of the Session API.
  */
@@ -67,7 +67,7 @@ public class ClientSession implements Session {
 
     private final SessionOptions options;
     private final ClientConnection connection;
-    private final ScheduledExecutorService serializer;
+    private final EventLoopGroup serializer;
     private final String sessionId;
     private final ClientSenderBuilder senderBuilder;
     private final ClientReceiverBuilder receiverBuilder;
@@ -137,7 +137,7 @@ public class ClientSession implements Session {
         return doClose(error);
     }
 
-    private Future<Session> doClose(ErrorCondition error) {
+    private ClientFuture<Session> doClose(ErrorCondition error) {
         if (CLOSED_UPDATER.compareAndSet(this, 0, 1)) {
             // Already closed by failure or shutdown so no need to queue task
             if (!closeFuture.isDone()) {
@@ -441,7 +441,7 @@ public class ClientSession implements Session {
         return this;
     }
 
-    ScheduledExecutorService getScheduler() {
+    EventLoopGroup getScheduler() {
         return serializer;
     }
 
@@ -457,7 +457,7 @@ public class ClientSession implements Session {
         return closed > 0;
     }
 
-    ScheduledFuture<?> scheduleRequestTimeout(final AsyncResult<?> request, long timeout, Supplier<ClientException> errorSupplier) {
+    io.netty5.util.concurrent.Future<Void> scheduleRequestTimeout(final AsyncResult<?> request, long timeout, Supplier<ClientException> errorSupplier) {
         if (timeout != INFINITE) {
             return serializer.schedule(() -> request.failed(errorSupplier.get()), timeout, TimeUnit.MILLISECONDS);
         } else {

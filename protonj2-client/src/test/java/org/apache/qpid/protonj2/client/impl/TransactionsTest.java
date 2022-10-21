@@ -63,10 +63,11 @@ import org.apache.qpid.protonj2.types.messaging.Released;
 import org.apache.qpid.protonj2.types.transactions.TransactionErrors;
 import org.apache.qpid.protonj2.types.transport.AmqpError;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-//@Timeout(30)
+@Timeout(30)
 public class TransactionsTest extends ImperativeClientTestCase {
 
     private static final Logger LOG = LoggerFactory.getLogger(TransactionsTest.class);

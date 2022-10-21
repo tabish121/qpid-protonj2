@@ -39,11 +39,11 @@ import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.test.ImperativeClientTestCase;
 import org.junit.jupiter.api.Test;
 
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.OpenSslEngine;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslHandler;
+import io.netty5.buffer.BufferAllocator;
+import io.netty5.handler.ssl.OpenSsl;
+import io.netty5.handler.ssl.OpenSslEngine;
+import io.netty5.handler.ssl.SslContext;
+import io.netty5.handler.ssl.SslHandler;
 
 /**
  * Tests for the TransportSupport class.
@@ -107,7 +107,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         List<String> engineProtocols = Arrays.asList(engine.getEnabledProtocols());
@@ -375,7 +375,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         List<String> engineProtocols = Arrays.asList(engine.getEnabledProtocols());
@@ -405,7 +405,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         assertArrayEquals(ENABLED_OPENSSL_PROTOCOLS, engine.getEnabledProtocols(), "Enabled protocols not as expected");
@@ -435,7 +435,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         List<String> engineProtocols = Arrays.asList(engine.getEnabledProtocols());
@@ -465,7 +465,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         assertArrayEquals(ENABLED_OPENSSL_PROTOCOLS, engine.getEnabledProtocols(), "Enabled protocols not as expected");
@@ -507,7 +507,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         String[] trimmedProtocols = Arrays.copyOf(protocols, protocols.length - 1);
         options.disabledProtocols(disabledProtocol);
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
 
         // verify the option took effect
         assertNotNull(engine);
@@ -558,7 +558,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         options.enabledProtocols(enabledProtocols);
         options.disabledProtocols(disabledProtocol);
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
 
         // Because Netty cannot currently disable SSLv2Hello in OpenSSL we need to account for it popping up.
         ArrayList<String> remainingProtocolsList = new ArrayList<>(Arrays.asList(remainingProtocols));
@@ -610,7 +610,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         String[] enabledCipher = new String[] { cipher };
         options.enabledCipherSuites(enabledCipher);
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
 
         // verify the option took effect
         assertNotNull(engine);
@@ -653,7 +653,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         String[] trimmedCiphers = Arrays.copyOf(ciphers, ciphers.length - 1);
         options.disabledCipherSuites(disabledCipher);
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
 
         // verify the option took effect
         assertNotNull(engine);
@@ -704,7 +704,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         options.enabledCipherSuites(enabledCiphers);
         options.disabledCipherSuites(disabledCipher);
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
 
         // verify the option took effect, that the disabled ciphers were removed from the enabled list.
         assertNotNull(engine);
@@ -735,7 +735,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         List<String> engineProtocols = Arrays.asList(engine.getEnabledProtocols());
@@ -767,7 +767,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         assertArrayEquals(ENABLED_OPENSSL_PROTOCOLS, engine.getEnabledProtocols(), "Enabled protocols not as expected");
@@ -799,7 +799,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         assertEquals("HTTPS", engine.getSSLParameters().getEndpointIdentificationAlgorithm());
@@ -831,7 +831,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslContext context = SslSupport.createOpenSslContext(options);
         assertNotNull(context);
 
-        SSLEngine engine = SslSupport.createOpenSslEngine(PooledByteBufAllocator.DEFAULT, null, -1, context, options);
+        SSLEngine engine = SslSupport.createOpenSslEngine(BufferAllocator.onHeapUnpooled(), null, -1, context, options);
         assertNotNull(engine);
 
         assertNull(engine.getSSLParameters().getEndpointIdentificationAlgorithm());
@@ -927,7 +927,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
         SslOptions options = new SslOptions();
         options.allowNativeSSL(true);
 
-        SslHandler handler = SslSupport.createSslHandler(PooledByteBufAllocator.DEFAULT, null, -1, options);
+        SslHandler handler = SslSupport.createSslHandler(BufferAllocator.onHeapUnpooled(), null, -1, options);
         assertNotNull(handler);
         assertTrue(handler.engine() instanceof OpenSslEngine);
     }
@@ -1014,7 +1014,7 @@ public class SslSupportTest extends ImperativeClientTestCase {
 
     private SSLEngine createOpenSSLEngineDirectly(SslOptions options) throws Exception {
         SslContext context = SslSupport.createOpenSslContext(options);
-        SSLEngine engine = context.newEngine(PooledByteBufAllocator.DEFAULT);
+        SSLEngine engine = context.newEngine(BufferAllocator.onHeapUnpooled());
         return engine;
     }
 }
