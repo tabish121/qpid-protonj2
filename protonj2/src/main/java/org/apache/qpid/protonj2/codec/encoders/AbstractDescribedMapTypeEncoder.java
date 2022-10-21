@@ -108,7 +108,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
     }
 
     private void writeSmallType(ProtonBuffer buffer, EncoderState state, M value, int elementCount) {
-        final int startIndex = buffer.getWriteIndex();
+        final int startIndex = buffer.getWriteOffset();
 
         // Reserve space for the size and write the count of list elements.
         buffer.writeByte((byte) 0);
@@ -117,13 +117,13 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
         writeMapEntries(buffer, state, value);
 
         // Move back and write the size
-        final int writeSize = (buffer.getWriteIndex() - startIndex) - Byte.BYTES;
+        final int writeSize = (buffer.getWriteOffset() - startIndex) - Byte.BYTES;
 
-        buffer.setByte(startIndex, writeSize);
+        buffer.setByte(startIndex, (byte) writeSize);
     }
 
     private void writeLargeType(ProtonBuffer buffer, EncoderState state, M value, int elementCount) {
-        final int startIndex = buffer.getWriteIndex();
+        final int startIndex = buffer.getWriteOffset();
 
         // Reserve space for the size and write the count of list elements.
         buffer.writeInt(0);
@@ -132,7 +132,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
         writeMapEntries(buffer, state, value);
 
         // Move back and write the size
-        final int writeSize = (buffer.getWriteIndex() - startIndex) - Integer.BYTES;
+        final int writeSize = (buffer.getWriteOffset() - startIndex) - Integer.BYTES;
 
         buffer.setInt(startIndex, writeSize);
     }
@@ -142,7 +142,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
         // Write the Array Type encoding code, we don't optimize here.
         buffer.writeByte(EncodingCodes.ARRAY32);
 
-        final int startIndex = buffer.getWriteIndex();
+        final int startIndex = buffer.getWriteOffset();
 
         // Reserve space for the size and write the count of list elements.
         buffer.writeInt(0);
@@ -154,7 +154,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
         writeRawArray(buffer, state, values);
 
         // Move back and write the size
-        final int writeSize = buffer.getWriteIndex() - startIndex - Integer.BYTES;
+        final int writeSize = buffer.getWriteOffset() - startIndex - Integer.BYTES;
 
         if (writeSize > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Cannot encode given array, encoded size too large: " + writeSize);
@@ -171,7 +171,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
         for (int i = 0; i < values.length; ++i) {
             final M map = (M) values[i];
             final int count = getMapSize(map);
-            final int mapStartIndex = buffer.getWriteIndex();
+            final int mapStartIndex = buffer.getWriteOffset();
 
             // Reserve space for the size and write the count of list elements.
             buffer.writeInt(0);
@@ -180,7 +180,7 @@ public abstract class AbstractDescribedMapTypeEncoder<K, V, M> extends AbstractD
             writeMapEntries(buffer, state, map);
 
             // Move back and write the size
-            final int writeSize = buffer.getWriteIndex() - mapStartIndex - Integer.BYTES;
+            final int writeSize = buffer.getWriteOffset() - mapStartIndex - Integer.BYTES;
 
             buffer.setInt(mapStartIndex, writeSize);
         }

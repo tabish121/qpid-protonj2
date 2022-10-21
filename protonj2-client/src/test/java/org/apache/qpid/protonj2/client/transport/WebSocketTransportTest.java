@@ -28,8 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonByteBufferAllocator;
-import org.apache.qpid.protonj2.buffer.ProtonNettyByteBuffer;
+import org.apache.qpid.protonj2.buffer.ProtonBufferAllocator;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.apache.qpid.protonj2.client.test.Wait;
@@ -40,7 +39,6 @@ import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler.HandshakeComplete;
 
@@ -141,9 +139,9 @@ public class WebSocketTransportTest extends TcpTransportTest {
     public void testConnectionsSendReceiveLargeDataWhenFrameSizeAllowsIt() throws Exception {
         final int FRAME_SIZE = 8192;
 
-        ProtonBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(FRAME_SIZE));
+        final ProtonBuffer sendBuffer = allocator.allocate(FRAME_SIZE);
         for (int i = 0; i < FRAME_SIZE; ++i) {
-            sendBuffer.writeByte('A');
+            sendBuffer.writeByte((byte) 'A');
         }
 
         try (NettyEchoServer server = createEchoServer()) {
@@ -197,9 +195,9 @@ public class WebSocketTransportTest extends TcpTransportTest {
 
         final int FRAME_SIZE = 5317;
 
-        ProtonBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(FRAME_SIZE));
+        final ProtonBuffer sendBuffer = allocator.allocate(FRAME_SIZE);
         for (int i = 0; i < FRAME_SIZE; ++i) {
-            sendBuffer.writeByte('A' + (i % 10));
+            sendBuffer.writeByte((byte) ('A' + (i % 10)));
         }
 
         try (NettyEchoServer server = createEchoServer()) {
@@ -216,17 +214,17 @@ public class WebSocketTransportTest extends TcpTransportTest {
             clientOptions.traceBytes(true);
             clientOptions.webSocketMaxFrameSize(FRAME_SIZE);
 
-            NettyTransportListener wsListener = new NettyTransportListener(true);
+            NettyTransportListener wsListener = new NettyTransportListener();
 
             Transport transport = createTransport(clientOptions, createSSLOptions());
             try {
                 transport.connect(HOSTNAME, port, wsListener).awaitConnect();
                 transports.add(transport);
                 if (writeAndFlush) {
-                    transport.writeAndFlush(ProtonByteBufferAllocator.DEFAULT.allocate());
+                    transport.writeAndFlush(allocator.allocate());
                     transport.writeAndFlush(sendBuffer.copy());
                 } else {
-                    transport.write(ProtonByteBufferAllocator.DEFAULT.allocate());
+                    transport.write(allocator.allocate());
                     transport.write(sendBuffer.copy());
                     transport.flush();
                 }
@@ -249,9 +247,10 @@ public class WebSocketTransportTest extends TcpTransportTest {
 
             assertEquals(2, data.size(), "Expected 2 data packets due to separate websocket frames");
 
-            ProtonBuffer receivedBuffer = ProtonByteBufferAllocator.DEFAULT.allocate(FRAME_SIZE);
+            ProtonBuffer receivedBuffer = ProtonBufferAllocator.defaultAllocator().allocate(FRAME_SIZE);
             for (ProtonBuffer buf : data) {
-               buf.readBytes(receivedBuffer, buf.getReadableBytes());
+                buf.copyInto(buf.getReadOffset(), receivedBuffer, receivedBuffer.getWriteOffset(), buf.getReadableBytes());
+                receivedBuffer.advanceWriteOffset(buf.getReadableBytes());
             }
 
             assertEquals(FRAME_SIZE, receivedBuffer.getReadableBytes(), "Unexpected data length");
@@ -269,9 +268,9 @@ public class WebSocketTransportTest extends TcpTransportTest {
     public void testConnectionsSendReceiveLargeDataFailsDueToMaxFrameSize() throws Exception {
         final int FRAME_SIZE = 1024;
 
-        ProtonBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(FRAME_SIZE));
+        final ProtonBuffer sendBuffer = allocator.allocate(FRAME_SIZE);
         for (int i = 0; i < FRAME_SIZE; ++i) {
-            sendBuffer.writeByte('A');
+            sendBuffer.writeByte((byte) 'A');
         }
 
         try (NettyEchoServer server = createEchoServer()) {
@@ -306,9 +305,9 @@ public class WebSocketTransportTest extends TcpTransportTest {
     public void testTransportDetectsConnectionDropWhenServerEnforcesMaxFrameSize() throws Exception {
         final int FRAME_SIZE = 1024;
 
-        ProtonBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(FRAME_SIZE));
+        final ProtonBuffer sendBuffer = allocator.allocate(FRAME_SIZE);
         for (int i = 0; i < FRAME_SIZE; ++i) {
-            sendBuffer.writeByte('A');
+            sendBuffer.writeByte((byte) 'A');
         }
 
         try (NettyEchoServer server = createEchoServer()) {

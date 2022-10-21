@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonByteBufferAllocator;
 import org.apache.qpid.protonj2.engine.AMQPPerformativeEnvelopePool;
 import org.apache.qpid.protonj2.engine.ConnectionState;
 import org.apache.qpid.protonj2.engine.Engine;
@@ -54,8 +53,8 @@ public class ProtonEngine implements Engine {
 
     private static final ProtonLogger LOG = ProtonLoggerFactory.getLogger(ProtonEngine.class);
 
-    private static final ProtonBuffer EMPTY_FRAME_BUFFER =
-        ProtonByteBufferAllocator.DEFAULT.wrap(new byte[] {0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00});
+    private static final byte[] EMPTY_FRAME_BUFFER =
+        new byte[] {0x00, 0x00, 0x00, 0x08, 0x02, 0x00, 0x00, 0x00};
 
     private final ProtonEnginePipeline pipeline =  new ProtonEnginePipeline(this);
     private final ProtonEnginePipelineProxy pipelineProxy = new ProtonEnginePipelineProxy(pipeline);
@@ -223,9 +222,9 @@ public class ProtonEngine implements Engine {
         }
 
         try {
-            int startIndex = input.getReadIndex();
+            final int startIndex = input.getReadOffset();
             pipeline.fireRead(input);
-            if (input.getReadIndex() != startIndex) {
+            if (input.getReadOffset() != startIndex) {
                 inputSequence++;
             }
         } catch (Exception error) {
@@ -432,7 +431,7 @@ public class ProtonEngine implements Engine {
                 lastOutputSequence = outputSequence;
             } else if (remoteIdleDeadline - currentTime <= 0) {
                 remoteIdleDeadline = computeDeadline(currentTime, remoteIdleTimeout / 2);
-                pipeline.fireWrite(EMPTY_FRAME_BUFFER.duplicate(), null);
+                pipeline.fireWrite(configuration.getBufferAllocator().copy(EMPTY_FRAME_BUFFER).convertToReadOnly(), null);
                 lastOutputSequence++;
             }
         }

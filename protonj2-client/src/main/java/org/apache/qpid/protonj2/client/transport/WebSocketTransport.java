@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonNettyByteBuffer;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.slf4j.Logger;
@@ -237,11 +236,11 @@ public class WebSocketTransport extends TcpTransport {
             } else if (frame instanceof BinaryWebSocketFrame) {
                 BinaryWebSocketFrame binaryFrame = (BinaryWebSocketFrame) frame;
                 LOG.trace("WebSocket Client received data: {} bytes", binaryFrame.content().readableBytes());
-                listener.transportRead(new ProtonNettyByteBuffer(binaryFrame.content()));
+                dispatchReadBuffer(binaryFrame.content());
             } else if (frame instanceof ContinuationWebSocketFrame) {
                 ContinuationWebSocketFrame continuationFrame = (ContinuationWebSocketFrame) frame;
                 LOG.trace("WebSocket Client received data continuation: {} bytes", continuationFrame.content().readableBytes());
-                listener.transportRead(new ProtonNettyByteBuffer(continuationFrame.content()));
+                dispatchReadBuffer(continuationFrame.content());
             } else if (frame instanceof PingWebSocketFrame) {
                 LOG.trace("WebSocket Client received ping, response with pong");
                 ch.write(new PongWebSocketFrame(frame.content()));

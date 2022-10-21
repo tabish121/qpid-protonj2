@@ -465,6 +465,10 @@ public final class ClientStreamSender extends ClientSenderLinkType<StreamSender>
                 sendTimeout = null;
             }
 
+            if (payload != null) {
+                payload.close();
+            }
+
             if (delivery != null) {
                 ClientTracker tracker = delivery.getLinkedResource();
                 if (tracker != null) {
@@ -481,6 +485,10 @@ public final class ClientStreamSender extends ClientSenderLinkType<StreamSender>
                 sendTimeout.cancel(true);
             }
 
+            if (payload != null) {
+                payload.close();
+            }
+
             request.complete(delivery.getLinkedResource());
 
             return this;
@@ -489,6 +497,10 @@ public final class ClientStreamSender extends ClientSenderLinkType<StreamSender>
         public ClientOutgoingEnvelope failed(ClientException exception) {
             if (sendTimeout != null) {
                 sendTimeout.cancel(true);
+            }
+
+            if (payload != null) {
+                payload.close();
             }
 
             request.failed(exception);
