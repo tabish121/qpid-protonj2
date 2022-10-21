@@ -25,8 +25,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
 import org.apache.qpid.protonj2.buffer.ProtonBufferAllocator;
-import org.apache.qpid.protonj2.buffer.ProtonNettyByteBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonNettyByteBufferAllocator;
+import org.apache.qpid.protonj2.buffer.ProtonBufferComponent;
+import org.apache.qpid.protonj2.buffer.ProtonBufferComponentAccessor;
+import org.apache.qpid.protonj2.buffer.netty.Netty4ProtonBufferAllocator;
+import org.apache.qpid.protonj2.buffer.netty.Netty4ToProtonBufferAdapter;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.apache.qpid.protonj2.client.util.IOExceptionSupport;
@@ -42,6 +44,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.logging.LoggingHandler;
@@ -69,6 +72,7 @@ public class TcpTransport implements Transport {
     protected String host;
     protected int port;
     protected TransportListener listener;
+    protected Netty4ProtonBufferAllocator nettyAllocator;
 
     /**
      * Create a new {@link TcpTransport} instance with the given configuration.
@@ -133,6 +137,8 @@ public class TcpTransport implements Transport {
             @Override
             public void initChannel(Channel transportChannel) throws Exception {
                 channel = transportChannel;
+                nettyAllocator = new Netty4ProtonBufferAllocator(channel.alloc());
+
                 configureChannel(transportChannel);
                 try {
                     listener.transportInitialized(TcpTransport.this);
@@ -196,18 +202,7 @@ public class TcpTransport implements Transport {
 
     @Override
     public ProtonBufferAllocator getBufferAllocator() {
-        return new ProtonNettyByteBufferAllocator() {
-
-            @Override
-            public ProtonBuffer outputBuffer(int initialCapacity) {
-                return new ProtonNettyByteBuffer(channel.alloc().ioBuffer(initialCapacity));
-            }
-
-            @Override
-            public ProtonBuffer outputBuffer(int initialCapacity, int maximumCapacity) {
-                return new ProtonNettyByteBuffer(channel.alloc().ioBuffer(initialCapacity, maximumCapacity));
-            }
-        };
+        return nettyAllocator;
      }
 
     @Override
@@ -219,10 +214,12 @@ public class TcpTransport implements Transport {
     public TcpTransport write(ProtonBuffer output, Runnable onComplete) throws IOException {
         checkConnected(output);
         LOG.trace("Attempted write of buffer: {}", output);
+        final ChannelPromise promise;
+
         if (onComplete == null) {
-            channel.write(toOutputBuffer(output), channel.voidPromise());
+            promise = channel.voidPromise();
         } else {
-            channel.write(toOutputBuffer(output), channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
+            promise = channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
 
                 @Override
                 public void operationComplete(Future<? super Void> future) throws Exception {
@@ -230,9 +227,10 @@ public class TcpTransport implements Transport {
                         onComplete.run();
                     }
                 }
-            }));
+            });
         }
-        return this;
+
+        return writeOutputBuffer(output, false, promise);
     }
 
     @Override
@@ -244,10 +242,12 @@ public class TcpTransport implements Transport {
     public TcpTransport writeAndFlush(ProtonBuffer output, Runnable onComplete) throws IOException {
         checkConnected(output);
         LOG.trace("Attempted write and flush of buffer: {}", output);
+        final ChannelPromise promise;
+
         if (onComplete == null) {
-            channel.writeAndFlush(toOutputBuffer(output), channel.voidPromise());
+            promise = channel.voidPromise();
         } else {
-            channel.writeAndFlush(toOutputBuffer(output), channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
+            promise = channel.newPromise().addListener(new GenericFutureListener<Future<? super Void>>() {
 
                 @Override
                 public void operationComplete(Future<? super Void> future) throws Exception {
@@ -255,9 +255,10 @@ public class TcpTransport implements Transport {
                         onComplete.run();
                     }
                 }
-            }));
+            });
         }
-        return this;
+
+        return writeOutputBuffer(output, true, promise);
     }
 
     @Override
@@ -298,15 +299,50 @@ public class TcpTransport implements Transport {
     protected final ByteBuf toOutputBuffer(final ProtonBuffer output) throws IOException {
         final ByteBuf nettyBuf;
 
-        if (output instanceof ProtonNettyByteBuffer) {
-            nettyBuf = (ByteBuf) output.unwrap();
+        if (output instanceof Netty4ToProtonBufferAdapter) {
+            nettyBuf = ((Netty4ToProtonBufferAdapter) output).unwrapAndRelease();
         } else {
-            ProtonNettyByteBuffer wrapped = new ProtonNettyByteBuffer(channel.alloc().ioBuffer(output.getReadableBytes()));
-            wrapped.writeBytes(output);
-            nettyBuf = wrapped.unwrap();
+            try (output) {
+                Netty4ToProtonBufferAdapter wrapped = nettyAllocator.outputBuffer(output.getReadableBytes());
+                wrapped.writeBytes(output);
+                nettyBuf = wrapped.unwrap();
+            }
         }
 
         return nettyBuf;
+    }
+
+    private TcpTransport writeOutputBuffer(final ProtonBuffer buffer, boolean flush, ChannelPromise promise) {
+        int writeCount = buffer.componentCount();
+
+        try (ProtonBuffer ioBuffer = buffer; ProtonBufferComponentAccessor accessor = buffer.componentAccessor()) {
+            for (ProtonBufferComponent output = accessor.firstReadable(); output != null; output = accessor.nextReadable()) {
+                final ByteBuf nettyBuf;
+
+                if (output instanceof Netty4ToProtonBufferAdapter) {
+                    nettyBuf = ((Netty4ToProtonBufferAdapter)output).unwrapAndRelease();
+                } else {
+                    nettyBuf = channel.alloc().ioBuffer(output.getReadableBytes());
+                    if (output.hasReadbleArray()) {
+                        nettyBuf.writeBytes(output.getReadableArray(), output.getReadableArrayOffset(), output.getReadableBytes());
+                    } else {
+                        nettyBuf.writeBytes(output.getReadableBuffer());
+                    }
+                }
+
+                if (--writeCount > 0) {
+                    channel.write(nettyBuf, channel.voidPromise());
+                } else {
+                    if (flush) {
+                        channel.writeAndFlush(nettyBuf, promise);
+                    } else {
+                        channel.write(nettyBuf, promise);
+                    }
+                }
+            }
+        }
+
+        return this;
     }
 
     //----- Internal implementation details, can be overridden as needed -----//
@@ -360,7 +396,7 @@ public class TcpTransport implements Transport {
 
     private void checkConnected(ProtonBuffer output) throws IOException {
         if (!connected.get() || !channel.isActive()) {
-            if (output instanceof ProtonNettyByteBuffer) {
+            if (output instanceof Netty4ToProtonBufferAdapter) {
                 ReferenceCountUtil.release(output.unwrap());
             }
             throw new IOException("Cannot send to a non-connected transport.", failureCause);
@@ -422,6 +458,10 @@ public class TcpTransport implements Transport {
 
     protected abstract class NettyDefaultHandler<E> extends SimpleChannelInboundHandler<E> {
 
+        public NettyDefaultHandler() {
+            super(false); // We will release buffer references manually.
+        }
+
         @Override
         public final void channelRegistered(ChannelHandlerContext context) throws Exception {
             channel = context.channel();
@@ -464,6 +504,20 @@ public class TcpTransport implements Transport {
         public void exceptionCaught(ChannelHandlerContext context, Throwable cause) throws Exception {
             handleTransportFailure(context.channel(), cause);
         }
+
+        protected void dispatchReadBuffer(ByteBuf buffer) throws Exception {
+            LOG.trace("New data read: {}", buffer);
+
+            // Wrap the buffer and make it read-only as the handlers should not be altering the
+            // read bytes and if they need to they should be copying them. If the handler doesn't
+            // take ownership of the incoming buffer then we will close it and the reference count
+            // will be decremented here (default auto decrement has been disabled).
+            final ProtonBuffer wrapped = nettyAllocator.wrap(buffer).convertToReadOnly();
+
+            try (wrapped) {
+                listener.transportRead(wrapped);
+            }
+        }
     }
 
     //----- Handle binary data over socket connections -----------------------//
@@ -472,18 +526,7 @@ public class TcpTransport implements Transport {
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, ByteBuf buffer) throws Exception {
-            LOG.trace("New data read: {}", buffer);
-
-            final ProtonNettyByteBuffer wrapped = new ProtonNettyByteBuffer(buffer);
-
-            // Avoid all doubts to the contrary
-            if (channel.eventLoop().inEventLoop()) {
-                listener.transportRead(wrapped);
-            } else {
-                channel.eventLoop().execute(() -> {
-                    listener.transportRead(wrapped);
-                });
-            }
+            dispatchReadBuffer(buffer);
         }
     }
 

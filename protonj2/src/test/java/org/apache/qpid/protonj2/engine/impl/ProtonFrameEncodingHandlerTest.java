@@ -24,7 +24,7 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonByteBufferAllocator;
+import org.apache.qpid.protonj2.buffer.ProtonBufferAllocator;
 import org.apache.qpid.protonj2.codec.CodecFactory;
 import org.apache.qpid.protonj2.codec.Decoder;
 import org.apache.qpid.protonj2.codec.DecoderState;
@@ -60,7 +60,7 @@ class ProtonFrameEncodingHandlerTest {
         configuration = Mockito.mock(ProtonEngineConfiguration.class);
         Mockito.when(configuration.getInboundMaxFrameSize()).thenReturn(Long.valueOf(65535));
         Mockito.when(configuration.getOutboundMaxFrameSize()).thenReturn(Long.valueOf(65535));
-        Mockito.when(configuration.getBufferAllocator()).thenReturn(ProtonByteBufferAllocator.DEFAULT);
+        Mockito.when(configuration.getBufferAllocator()).thenReturn(ProtonBufferAllocator.defaultAllocator());
 
         engine = Mockito.mock(ProtonEngine.class);
         Mockito.when(engine.configuration()).thenReturn(configuration);
@@ -90,7 +90,7 @@ class ProtonFrameEncodingHandlerTest {
         ProtonBuffer output = argument.getValue();
 
         assertNotNull(output);
-        assertTrue(output.getWriteIndex() > 0);
+        assertTrue(output.getWriteOffset() > 0);
 
         final int bufferSize = output.getReadableBytes();
 
@@ -120,7 +120,7 @@ class ProtonFrameEncodingHandlerTest {
 
         random.nextBytes(payload);
 
-        OutgoingAMQPEnvelope frame = framePool.take(transfer, 32, ProtonByteBufferAllocator.DEFAULT.wrap(payload));
+        OutgoingAMQPEnvelope frame = framePool.take(transfer, 32, ProtonBufferAllocator.defaultAllocator().copy(payload));
 
         handler.handleWrite(context, frame);
 
@@ -130,7 +130,7 @@ class ProtonFrameEncodingHandlerTest {
         ProtonBuffer output = argument.getValue();
 
         assertNotNull(output);
-        assertTrue(output.getWriteIndex() > 0);
+        assertTrue(output.getWriteOffset() > 0);
 
         final int bufferSize = output.getReadableBytes();
 
@@ -161,7 +161,7 @@ class ProtonFrameEncodingHandlerTest {
 
         random.nextBytes(payload);
 
-        OutgoingAMQPEnvelope frame = framePool.take(transfer, 32, ProtonByteBufferAllocator.DEFAULT.wrap(payload));
+        OutgoingAMQPEnvelope frame = framePool.take(transfer, 32, ProtonBufferAllocator.defaultAllocator().copy(payload));
         frame.setPayloadToLargeHandler((performative) -> {
             transfer.setMore(true);
             toLargeHandlerCalled.set(true);
@@ -180,7 +180,7 @@ class ProtonFrameEncodingHandlerTest {
 
         final int bufferSize = output.getReadableBytes();
 
-        assertEquals(configuration.getOutboundMaxFrameSize(), output.maxCapacity());
+        assertEquals(configuration.getOutboundMaxFrameSize(), output.capacity());
         assertEquals(bufferSize, output.readInt());
         assertEquals(FRAME_DOFF_SIZE, output.readByte());
         assertEquals(AMQP_FRAME_TYPE, output.readByte());
@@ -207,7 +207,7 @@ class ProtonFrameEncodingHandlerTest {
 
         random.nextBytes(payload);
 
-        OutgoingAMQPEnvelope frame = Mockito.spy(framePool.take(transfer, 32, ProtonByteBufferAllocator.DEFAULT.wrap(payload)));
+        OutgoingAMQPEnvelope frame = Mockito.spy(framePool.take(transfer, 32, ProtonBufferAllocator.defaultAllocator().copy(payload)));
 
         handler.handleWrite(context, frame);
 
@@ -218,7 +218,7 @@ class ProtonFrameEncodingHandlerTest {
         ProtonBuffer output = argument.getValue();
 
         assertNotNull(output);
-        assertTrue(output.getWriteIndex() > 0);
+        assertTrue(output.getWriteOffset() > 0);
 
         final int bufferSize = output.getReadableBytes();
 

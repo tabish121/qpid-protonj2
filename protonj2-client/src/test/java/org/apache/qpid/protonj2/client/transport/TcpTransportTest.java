@@ -35,12 +35,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.qpid.protonj2.buffer.ProtonBuffer;
-import org.apache.qpid.protonj2.buffer.ProtonNettyByteBuffer;
+import org.apache.qpid.protonj2.buffer.ProtonBufferAllocator;
+import org.apache.qpid.protonj2.buffer.netty.Netty4ProtonBufferAllocator;
 import org.apache.qpid.protonj2.client.SslOptions;
 import org.apache.qpid.protonj2.client.TransportOptions;
 import org.apache.qpid.protonj2.client.test.ImperativeClientTestCase;
 import org.apache.qpid.protonj2.client.test.Wait;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
@@ -49,8 +51,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.kqueue.KQueue;
@@ -78,9 +79,18 @@ public class TcpTransportTest extends ImperativeClientTestCase {
     protected final List<ProtonBuffer> data = new ArrayList<>();
     protected final AtomicInteger bytesRead = new AtomicInteger();
 
-    protected final TransportListener testListener = new NettyTransportListener(false);
+    protected final TransportListener testListener = new NettyTransportListener();
 
+    protected ProtonBufferAllocator allocator;
     protected NettyIOContext context;
+
+    @Override
+    @BeforeEach
+    public void setUp(TestInfo testInfo) throws Exception {
+        super.setUp(testInfo);
+
+        allocator = new Netty4ProtonBufferAllocator(UnpooledByteBufAllocator.DEFAULT);
+    }
 
     @Override
     @AfterEach
@@ -91,6 +101,11 @@ public class TcpTransportTest extends ImperativeClientTestCase {
             context.shutdown();
             context = null;
         }
+
+        data.removeIf((buffer) -> {
+            buffer.close();
+            return true;
+        });
     }
 
     @Test
@@ -311,9 +326,9 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         final int CONNECTION_COUNT = 10;
         final int FRAME_SIZE = 8;
 
-        ProtonNettyByteBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(FRAME_SIZE));
+        ProtonBuffer sendBuffer = allocator.allocate(FRAME_SIZE);
         for (int i = 0; i < 8; ++i) {
-            sendBuffer.writeByte('A');
+            sendBuffer.writeByte((byte) 'A');
         }
 
         try (NettyEchoServer server = createEchoServer()) {
@@ -417,10 +432,12 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             assertTrue(transport.isConnected());
 
+            final ProtonBuffer sendBuffer = allocator.allocate(0);
+
             if (writeAndFlush) {
-                transport.writeAndFlush(new ProtonNettyByteBuffer(Unpooled.buffer(0)));
+                transport.writeAndFlush(sendBuffer);
             } else {
-                transport.write(new ProtonNettyByteBuffer(Unpooled.buffer(0)));
+                transport.write(sendBuffer);
                 transport.flush();
             }
 
@@ -449,10 +466,10 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             assertTrue(transport.isConnected());
 
-            ProtonBuffer buffer = transport.getBufferAllocator().outputBuffer(64, 512);
+            ProtonBuffer buffer = transport.getBufferAllocator().allocate(64).implicitGrowthLimit(512);
 
             assertEquals(64, buffer.capacity());
-            assertEquals(512, buffer.maxCapacity());
+            assertEquals(512, buffer.implicitGrowthLimit());
 
             transport.writeAndFlush(buffer);
 
@@ -481,10 +498,10 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             assertTrue(transport.isConnected());
 
-            ProtonBuffer buffer = transport.getBufferAllocator().allocate(64, 512);
+            ProtonBuffer buffer = transport.getBufferAllocator().allocate(64).implicitGrowthLimit(512);
 
             assertEquals(64, buffer.capacity());
-            assertEquals(512, buffer.maxCapacity());
+            assertEquals(512, buffer.implicitGrowthLimit());
 
             transport.writeAndFlush(buffer);
 
@@ -515,7 +532,7 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             ProtonBuffer sendBuffer = transport.getBufferAllocator().outputBuffer(SEND_BYTE_COUNT);
             for (int i = 0; i < SEND_BYTE_COUNT; ++i) {
-                sendBuffer.writeByte('A');
+                sendBuffer.writeByte((byte) 'A');
             }
 
             transport.write(sendBuffer, () -> LOG.debug("Netty reports write complete"));
@@ -530,6 +547,54 @@ public class TcpTransportTest extends ImperativeClientTestCase {
             }, 10000, 50));
 
             assertEquals(SEND_BYTE_COUNT, data.get(0).getReadableBytes());
+
+            transport.close();
+        }
+
+        assertTrue(!transportErrored);  // Normal shutdown does not trigger the event.
+        assertTrue(exceptions.isEmpty());
+    }
+
+    @Test
+    public void testDataSentWithinCompositeBufferIsReceived() throws Exception {
+        try (NettyEchoServer server = createEchoServer()) {
+            server.start();
+
+            int port = server.getServerPort();
+
+            Transport transport = createTransport(createTransportOptions(), createSSLOptions());
+            try {
+                transport.connect(HOSTNAME, port, testListener).awaitConnect();
+                LOG.info("Connected to server:{}:{} as expected.", HOSTNAME, port);
+            } catch (Exception e) {
+                fail("Should not have failed to connect to the server at " + HOSTNAME + ":" + port + " but got exception: " + e);
+            }
+
+            assertTrue(transport.isConnected());
+
+            ProtonBuffer sendBuffer1 = transport.getBufferAllocator().outputBuffer(SEND_BYTE_COUNT);
+            for (int i = 0; i < SEND_BYTE_COUNT; ++i) {
+                sendBuffer1.writeByte((byte) 'A');
+            }
+            ProtonBuffer sendBuffer2 = transport.getBufferAllocator().outputBuffer(SEND_BYTE_COUNT + 10);
+            for (int i = 0; i < SEND_BYTE_COUNT + 10; ++i) {
+                sendBuffer2.writeByte((byte) 'A');
+            }
+
+            ProtonBuffer sendBuffer = transport.getBufferAllocator().composite(new ProtonBuffer[] { sendBuffer1, sendBuffer2});
+
+            transport.write(sendBuffer, () -> LOG.debug("Netty reports write complete"));
+            LOG.trace("Flush of Transport happens now");
+            transport.flush();
+
+            sendBuffer.close();
+
+            assertTrue(Wait.waitFor(new Wait.Condition() {
+                @Override
+                public boolean isSatisfied() throws Exception {
+                    return bytesRead.get() == SEND_BYTE_COUNT + SEND_BYTE_COUNT + 10;
+                }
+            }, 10000, 50));
 
             transport.close();
         }
@@ -557,7 +622,7 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             ProtonBuffer sendBuffer = transport.getBufferAllocator().outputBuffer(SEND_BYTE_COUNT);
             for (int i = 0; i < SEND_BYTE_COUNT; ++i) {
-                sendBuffer.writeByte('A');
+                sendBuffer.writeByte((byte) 'A');
             }
 
             transport.writeAndFlush(sendBuffer, () -> LOG.debug("Netty reports write complete"));
@@ -604,13 +669,14 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             assertTrue(transport.isConnected());
 
-            ProtonNettyByteBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(byteCount));
+            final ProtonBuffer sendBuffer = allocator.allocate(byteCount);
+
             for (int i = 0; i < byteCount; ++i) {
-                sendBuffer.writeByte('A');
+                sendBuffer.writeByte((byte) 'A');
             }
 
             for (int i = 0; i < iterations; ++i) {
-                transport.writeAndFlush(sendBuffer.copy());
+                transport.writeAndFlush(sendBuffer.copy(true));
             }
 
             assertTrue(Wait.waitFor(new Wait.Condition() {
@@ -648,7 +714,8 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             transport.close();
 
-            ProtonNettyByteBuffer sendBuffer = new ProtonNettyByteBuffer(Unpooled.buffer(10));
+            final ProtonBuffer sendBuffer = allocator.allocate(10);
+
             try {
                 transport.writeAndFlush(sendBuffer);
                 fail("Should throw on send of closed transport");
@@ -667,7 +734,7 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             Transport transport = createTransport(createTransportOptions(), createSSLOptions());
             try {
-                transport.connect(HOSTNAME, port, new NettyTransportListener(false) {
+                transport.connect(HOSTNAME, port, new NettyTransportListener() {
 
                     @Override
                     public void transportInitialized(Transport transport) {
@@ -705,7 +772,7 @@ public class TcpTransportTest extends ImperativeClientTestCase {
 
             Transport transport = createTransport(createTransportOptions(), createSSLOptions());
             try {
-                transport.connect(HOSTNAME, port, new NettyTransportListener(false) {
+                transport.connect(HOSTNAME, port, new NettyTransportListener() {
 
                     @Override
                     public void transportInitialized(Transport transport) {
@@ -1102,21 +1169,12 @@ public class TcpTransportTest extends ImperativeClientTestCase {
     }
 
     public class NettyTransportListener implements TransportListener {
-        final boolean retainDataBufs;
-
-        NettyTransportListener(boolean retainDataBufs) {
-            this.retainDataBufs = retainDataBufs;
-        }
 
         @Override
         public void transportRead(ProtonBuffer incoming) {
             LOG.debug("Client has new incoming data of size: {}", incoming.getReadableBytes());
-            data.add(incoming);
             bytesRead.addAndGet(incoming.getReadableBytes());
-
-            if (retainDataBufs) {
-                ((ByteBuf) incoming.unwrap()).retain();
-            }
+            data.add(incoming.transfer());
         }
 
         @Override

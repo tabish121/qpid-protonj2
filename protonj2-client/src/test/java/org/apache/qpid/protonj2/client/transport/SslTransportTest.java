@@ -123,7 +123,7 @@ public class SslTransportTest extends TcpTransportTest {
             sslOptions.keyStorePassword("wrong");
 
             Transport transport = createTransport(createTransportOptions(), sslOptions);
-            transport.connect(HOSTNAME, port, new NettyTransportListener(false) {
+            transport.connect(HOSTNAME, port, new NettyTransportListener() {
 
                 @Override
                 public void transportError(Throwable cause) {
@@ -160,7 +160,7 @@ public class SslTransportTest extends TcpTransportTest {
             sslOptions.trustStorePassword("wrong");
 
             Transport transport = createTransport(createTransportOptions(), sslOptions);
-            transport.connect(HOSTNAME, port, new NettyTransportListener(false) {
+            transport.connect(HOSTNAME, port, new NettyTransportListener() {
 
                 @Override
                 public void transportError(Throwable cause) {
