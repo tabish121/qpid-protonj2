@@ -18,7 +18,6 @@
 package org.apache.qpid.protonj2.client.impl;
 
 import java.lang.invoke.MethodHandles;
-import java.util.concurrent.ScheduledFuture;
 
 import org.apache.qpid.protonj2.client.Link;
 import org.apache.qpid.protonj2.client.LinkOptions;
@@ -42,7 +41,7 @@ public abstract class ClientReceiverLinkType<ReceiverType extends Link<ReceiverT
     private static final Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     protected ClientFuture<ReceiverType> drainingFuture;
-    protected ScheduledFuture<?> drainingTimeout;
+    protected io.netty5.util.concurrent.Future<Void> drainingTimeout;
 
     protected Receiver protonReceiver;
 
@@ -103,7 +102,7 @@ public abstract class ClientReceiverLinkType<ReceiverType extends Link<ReceiverT
             if (receiver.getCredit() == 0) {
                 drainingFuture.complete(self());
                 if (drainingTimeout != null) {
-                    drainingTimeout.cancel(false);
+                    drainingTimeout.cancel();
                     drainingTimeout = null;
                 }
             }
@@ -140,7 +139,7 @@ public abstract class ClientReceiverLinkType<ReceiverType extends Link<ReceiverT
         if (drainingTimeout != null) {
             drainingFuture.failed(
                 failureCause != null ? failureCause : new ClientResourceRemotelyClosedException("The Receiver has been closed"));
-            drainingTimeout.cancel(false);
+            drainingTimeout.cancel();
             drainingTimeout = null;
         }
     }

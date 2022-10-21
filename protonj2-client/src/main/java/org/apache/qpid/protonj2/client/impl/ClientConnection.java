@@ -25,7 +25,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
@@ -75,6 +74,8 @@ import org.apache.qpid.protonj2.engine.sasl.client.SaslMechanismSelector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty5.channel.EventLoopGroup;
+
 /**
  * A {@link Connection} implementation that uses the Proton engine for AMQP protocol support.
  */
@@ -100,7 +101,7 @@ public final class ClientConnection implements Connection {
     private final ReconnectLocationPool reconnectPool = new ReconnectLocationPool();
     private final NettyIOContext ioContext;
     private final String connectionId;
-    private final ScheduledExecutorService executor;
+    private final EventLoopGroup executor;
     private final ThreadPoolExecutor notifications;
 
     private Engine engine;
@@ -569,7 +570,7 @@ public final class ClientConnection implements Connection {
         return closed > 0;
     }
 
-    ScheduledExecutorService getScheduler() {
+    EventLoopGroup getScheduler() {
         return executor;
     }
 
@@ -620,7 +621,7 @@ public final class ClientConnection implements Connection {
     //----- Private implementation events handlers and utility methods
 
     private void handleLocalOpen(org.apache.qpid.protonj2.engine.Connection connection) {
-        connection.tickAuto(getScheduler());
+        connection.tickAuto(ioContext.ioScheduler());
 
         if (options.openTimeout() > 0) {
             executor.schedule(() -> {

@@ -37,10 +37,9 @@ import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler.HandshakeComplete;
+import io.netty5.bootstrap.Bootstrap;
+import io.netty5.handler.codec.http.headers.HttpHeaders;
+import io.netty5.handler.codec.http.websocketx.WebSocketServerHandshakeCompletionEvent;
 
 /**
  * Test the Netty based WebSocket Transport
@@ -257,7 +256,7 @@ public class WebSocketTransportTest extends TcpTransportTest {
             assertEquals(sendBuffer, receivedBuffer, "Unexpected data");
         } finally {
             for (ProtonBuffer buf : data) {
-                ((ByteBuf) buf.unwrap()).release();
+                buf.close();
             }
         }
 
@@ -377,7 +376,8 @@ public class WebSocketTransportTest extends TcpTransportTest {
             assertEquals(port, transport.getPort(), "Server port is incorrect");
 
             assertTrue(server.awaitHandshakeCompletion(2000), "HandshakeCompletion not set within given time");
-            HandshakeComplete handshake = server.getHandshakeComplete();
+
+            WebSocketServerHandshakeCompletionEvent handshake = server.getHandshakeComplete();
             assertNotNull(handshake, "completion should not be null");
             HttpHeaders requestHeaders = handshake.requestHeaders();
 

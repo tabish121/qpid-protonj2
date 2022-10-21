@@ -40,6 +40,8 @@ import org.apache.qpid.protonj2.types.transport.SenderSettleMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty5.util.concurrent.Future;
+
 /**
  * Proton based AMQP Sender
  */
@@ -250,7 +252,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
         private final ClientSender sender;
         private final int messageFormat;
 
-        private ScheduledFuture<?> sendTimeout;
+        private Future<Void> sendTimeout;
         private OutgoingDelivery delivery;
 
         /**
@@ -276,7 +278,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
         /**
          * @return the {@link ScheduledFuture} used to determine when the send should fail if no credit available to write.
          */
-        public ScheduledFuture<?> sendTimeout() {
+        public Future<Void> sendTimeout() {
             return sendTimeout;
         }
 
@@ -286,7 +288,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
          * @param sendTimeout
          * 		The {@link ScheduledFuture} that will fail the send if not cancelled once it has been performed.
          */
-        public void sendTimeout(ScheduledFuture<?> sendTimeout) {
+        public void sendTimeout(Future<Void> sendTimeout) {
             this.sendTimeout = sendTimeout;
         }
 
@@ -296,7 +298,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
 
         public ClientOutgoingEnvelope succeeded() {
             if (sendTimeout != null) {
-                sendTimeout.cancel(true);
+                sendTimeout.cancel();
             }
 
             payload.close();
@@ -308,7 +310,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
 
         public ClientOutgoingEnvelope failed(ClientException exception) {
             if (sendTimeout != null) {
-                sendTimeout.cancel(true);
+                sendTimeout.cancel();
             }
 
             payload.close();
@@ -321,7 +323,7 @@ public final class ClientSender extends ClientSenderLinkType<Sender> implements 
         @Override
         public void discard() {
             if (sendTimeout != null) {
-                sendTimeout.cancel(true);
+                sendTimeout.cancel();
                 sendTimeout = null;
             }
 

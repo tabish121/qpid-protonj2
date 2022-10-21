@@ -300,15 +300,19 @@ public class ProtonFrameDecodingHandler implements EngineHandler, SaslPerformati
 
         private ProtonCompositeBuffer buffer;
         private int frameBytesRemaining;
+        private int frameSize;
 
         @Override
         public void parse(EngineHandlerContext context, ProtonBuffer input) {
-            if (input.getReadableBytes() < frameBytesRemaining) {
-                frameBytesRemaining -= input.getReadableBytes();
-                buffer.append(input);
-            } else {
+            if (input.getReadableBytes() > frameBytesRemaining) {
                 buffer.append(input.readSplit(frameBytesRemaining));
+            } else {
+                buffer.append(input);
+            }
 
+            frameBytesRemaining = frameSize - buffer.getReadableBytes();
+
+            if (frameBytesRemaining == 0) {
                 // Now we can consume the buffer frame body.
                 initializeFrameBodyParsingStage(buffer.getReadableBytes());
                 try (ProtonBuffer buffered = buffer) {
@@ -323,6 +327,7 @@ public class ProtonFrameDecodingHandler implements EngineHandler, SaslPerformati
         public FrameBufferingStage reset(int length) {
             buffer = configuration.getBufferAllocator().composite().convertToReadOnly();
             frameBytesRemaining = length;
+            frameSize = length;
 
             return this;
         }

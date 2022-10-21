@@ -133,7 +133,7 @@ public final class Netty4ToProtonBufferAdapter extends SharedResource<ProtonBuff
             try {
                 return resource.setIndex(readOffset, writeOffset);
             } finally {
-                resource = null;
+                resource = Unpooled.EMPTY_BUFFER;
             }
         } else {
             throw new ProtonBufferClosedException("The buffer has already been closed or transferred");
@@ -852,7 +852,9 @@ public final class Netty4ToProtonBufferAdapter extends SharedResource<ProtonBuff
     protected void releaseResourceOwnership() {
         closed = true;
         try {
-            ReferenceCountUtil.safeRelease(resource);
+            if (resource != Unpooled.EMPTY_BUFFER) {
+                ReferenceCountUtil.safeRelease(resource);
+            }
         } finally {
             resource = Unpooled.EMPTY_BUFFER;
             readOnly = false;

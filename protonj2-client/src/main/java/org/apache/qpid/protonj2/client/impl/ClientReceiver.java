@@ -228,7 +228,7 @@ public final class ClientReceiver extends ClientReceiverLinkType<Receiver> imple
         if (drainingFuture != null) {
             drainingFuture.complete(this);
             if (drainingTimeout != null) {
-                drainingTimeout.cancel(false);
+                drainingTimeout.cancel();
                 drainingTimeout = null;
             }
         }

@@ -44,22 +44,25 @@ import org.apache.qpid.protonj2.client.test.Wait;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.UnpooledByteBufAllocator;
-import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.kqueue.KQueue;
-import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.incubator.channel.uring.IOUring;
-import io.netty.incubator.channel.uring.IOUringEventLoopGroup;
-import io.netty.util.ResourceLeakDetector;
-import io.netty.util.ResourceLeakDetector.Level;
+import io.netty5.bootstrap.Bootstrap;
+import io.netty5.channel.IoHandler;
+import io.netty5.channel.MultithreadEventLoopGroup;
+import io.netty5.channel.SingleThreadEventLoop;
+import io.netty5.channel.epoll.Epoll;
+import io.netty5.channel.epoll.EpollHandler;
+import io.netty5.channel.kqueue.KQueue;
+import io.netty5.channel.kqueue.KQueueHandler;
+import io.netty5.util.ResourceLeakDetector;
+import io.netty5.util.ResourceLeakDetector.Level;
 
 /**
  * Test basic functionality of the Netty based TCP transport.
@@ -367,7 +370,7 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         assertTrue(exceptions.isEmpty());
     }
 
-    @Test
+    @RepeatedTest(1)
     public void testDetectServerClose() throws Exception {
         Transport transport = null;
 
@@ -385,8 +388,6 @@ public class TcpTransportTest extends ImperativeClientTestCase {
             }
 
             assertTrue(transport.isConnected());
-
-            server.close();
         }
 
         final Transport connectedTransport = transport;
@@ -889,11 +890,13 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         assertTrue(data.isEmpty());
     }
 
+    @Disabled("IU_Uring support not ready for Netty 5")
     @Test
     public void testConnectToServerWithIOUringEnabled() throws Exception {
         doTestIORingSupport(true);
     }
 
+    @Disabled("IU_Uring support not ready for Netty 5")
     @Test
     public void testConnectToServerWithIOUringDisabled() throws Exception {
         doTestIORingSupport(false);
@@ -932,62 +935,6 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         assertFalse(transportErrored);
         assertTrue(exceptions.isEmpty());
         assertTrue(data.isEmpty());
-    }
-
-    private void assertEpoll(String message, boolean expected, Transport transport) throws Exception {
-        Field bootstrap = null;
-        Class<?> transportType = transport.getClass();
-
-        while (transportType != null && bootstrap == null) {
-            try {
-                bootstrap = transportType.getDeclaredField("bootstrap");
-            } catch (NoSuchFieldException error) {
-                transportType = transportType.getSuperclass();
-                if (Object.class.equals(transportType)) {
-                    transportType = null;
-                }
-            }
-        }
-
-        assertNotNull(bootstrap, "Transport implementation unknown");
-
-        bootstrap.setAccessible(true);
-
-        Bootstrap transportBootstrap = (Bootstrap) bootstrap.get(transport);
-
-        if (expected) {
-            assertTrue(transportBootstrap.config().group() instanceof EpollEventLoopGroup, message);
-        } else {
-            assertFalse(transportBootstrap.config().group() instanceof EpollEventLoopGroup, message);
-        }
-    }
-
-    private void assertIOUring(String message, boolean expected, Transport transport) throws Exception {
-        Field bootstrap = null;
-        Class<?> transportType = transport.getClass();
-
-        while (transportType != null && bootstrap == null) {
-            try {
-                bootstrap = transportType.getDeclaredField("bootstrap");
-            } catch (NoSuchFieldException error) {
-                transportType = transportType.getSuperclass();
-                if (Object.class.equals(transportType)) {
-                    transportType = null;
-                }
-            }
-        }
-
-        assertNotNull(bootstrap, "Transport implementation unknown");
-
-        bootstrap.setAccessible(true);
-
-        Bootstrap transportBootstrap = (Bootstrap) bootstrap.get(transport);
-
-        if (expected) {
-            assertTrue(transportBootstrap.config().group() instanceof IOUringEventLoopGroup, message);
-        } else {
-            assertFalse(transportBootstrap.config().group() instanceof IOUringEventLoopGroup, message);
-        }
     }
 
     @Test
@@ -1081,31 +1028,6 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         assertTrue(data.isEmpty());
     }
 
-    private void assertKQueue(String message, boolean expected, Transport transport) throws Exception {
-        Field group = null;
-        Class<?> transportType = transport.getClass();
-
-        while (transportType != null && group == null) {
-            try {
-                group = transportType.getDeclaredField("group");
-            } catch (NoSuchFieldException error) {
-                transportType = transportType.getSuperclass();
-                if (Object.class.equals(transportType)) {
-                    transportType = null;
-                }
-            }
-        }
-
-        assertNotNull(group, "Transport implementation unknown");
-
-        group.setAccessible(true);
-        if (expected) {
-            assertTrue(group.get(transport) instanceof KQueueEventLoopGroup, message);
-        } else {
-            assertFalse(group.get(transport) instanceof KQueueEventLoopGroup, message);
-        }
-    }
-
     protected NettyIOContext createContext(TransportOptions options, SslOptions sslOptions) {
         if (context != null) {
             throw new IllegalStateException("Test already has a defined Netty IO Context");
@@ -1192,6 +1114,70 @@ public class TcpTransportTest extends ImperativeClientTestCase {
         @Override
         public void transportInitialized(Transport transport) {
             transportInitialized = true;
+        }
+    }
+
+    private void assertEpoll(String message, boolean expected, Transport transport) throws Exception {
+        assertEventLoopIoHandlerType(message, expected, transport ,EpollHandler.class);
+    }
+
+    private void assertKQueue(String message, boolean expected, Transport transport) throws Exception {
+        assertEventLoopIoHandlerType(message, expected, transport, KQueueHandler.class);
+    }
+
+    private void assertIOUring(String message, boolean expected, Transport transport) throws Exception {
+        //assertEventLoopIoHandlerType(message, expected, transport, IOUringHandler.class);
+        fail("Netty 5 doesn't have IO_Uring support yet");
+    }
+
+    private static void assertEventLoopIoHandlerType(String message, boolean expected, Transport transport, Class<? extends IoHandler> ioHandlerClass) throws Exception {
+        Field bootstrap = null;
+        Class<?> transportType = transport.getClass();
+
+        while (transportType != null && bootstrap == null) {
+            try {
+                bootstrap = transportType.getDeclaredField("bootstrap");
+            } catch (NoSuchFieldException error) {
+                transportType = transportType.getSuperclass();
+                if (Object.class.equals(transportType)) {
+                    transportType = null;
+                }
+            }
+        }
+
+        assertNotNull(bootstrap, "Transport implementation unknown");
+
+        bootstrap.setAccessible(true);
+
+        final Bootstrap transportBootstrap = (Bootstrap) bootstrap.get(transport);
+
+        assertTrue(MultithreadEventLoopGroup.class.isInstance(transportBootstrap.config().group()), message);
+        assertTrue(SingleThreadEventLoop.class.isInstance(transportBootstrap.config().group().next()), message);
+
+        Field ioHandlerField = null;
+        Class<?> executorType = transportBootstrap.config().group().next().getClass();
+
+        while (executorType != null && ioHandlerField == null) {
+            try {
+                ioHandlerField = executorType.getDeclaredField("ioHandler");
+            } catch (NoSuchFieldException error) {
+                executorType = executorType.getSuperclass();
+                if (Object.class.equals(executorType)) {
+                    executorType = null;
+                }
+            }
+        }
+
+        assertNotNull(ioHandlerField, "EventLoop implementation unknown");
+
+        ioHandlerField.setAccessible(true);
+
+        final IoHandler ioHandlerRef = (IoHandler) ioHandlerField.get(transportBootstrap.config().group().next());
+
+        if (expected) {
+            assertTrue(ioHandlerClass.isInstance(ioHandlerRef), message);
+        } else {
+            assertFalse(ioHandlerClass.isInstance(ioHandlerRef), message);
         }
     }
 }

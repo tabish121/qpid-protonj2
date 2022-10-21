@@ -30,6 +30,7 @@ import org.apache.qpid.protonj2.buffer.ProtonBufferUtils;
 import org.apache.qpid.protonj2.resource.SharedResource;
 
 import io.netty5.buffer.Buffer;
+import io.netty5.buffer.BufferAllocator;
 import io.netty5.buffer.BufferClosedException;
 import io.netty5.buffer.BufferReadOnlyException;
 
@@ -41,6 +42,13 @@ public final class Netty5ToProtonBufferAdapter extends SharedResource<ProtonBuff
     implements ProtonBuffer, ProtonBufferComponentAccessor, ProtonBufferComponent {
 
     private final Netty5ProtonBufferAllocator allocator;
+
+    private static final Buffer CLOSED_BUFFER;
+
+    static {
+        CLOSED_BUFFER = BufferAllocator.onHeapUnpooled().allocate(0);
+        CLOSED_BUFFER.close();
+    }
 
     private Buffer resource;
 
@@ -570,7 +578,6 @@ public final class Netty5ToProtonBufferAdapter extends SharedResource<ProtonBuff
         return 0;
     }
 
-
     @Override
     public int getReadableBytes() {
         return resource != null ? resource.readableBytes() : 0;
@@ -620,14 +627,18 @@ public final class Netty5ToProtonBufferAdapter extends SharedResource<ProtonBuff
 
     @Override
     protected void releaseResourceOwnership() {
-        if (resource != null) {
+        if (resource != null && resource.isAccessible()) {
             resource.close();
+            resource = CLOSED_BUFFER;
         }
     }
 
     @Override
     protected ProtonBuffer transferTheResource() {
-        return new Netty5ToProtonBufferAdapter(allocator, resource.send().receive());
+        final Buffer transferred = resource;
+        resource = CLOSED_BUFFER;
+
+        return new Netty5ToProtonBufferAdapter(allocator, transferred);
     }
 
     @Override

@@ -22,11 +22,12 @@ import org.apache.qpid.protonj2.client.TransportOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.netty.channel.Channel;
-import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollEventLoopGroup;
-import io.netty.channel.epoll.EpollSocketChannel;
+import io.netty5.channel.Channel;
+import io.netty5.channel.EventLoopGroup;
+import io.netty5.channel.MultithreadEventLoopGroup;
+import io.netty5.channel.epoll.Epoll;
+import io.netty5.channel.epoll.EpollHandler;
+import io.netty5.channel.epoll.EpollSocketChannel;
 
 public class EpollSupport {
 
@@ -44,7 +45,7 @@ public class EpollSupport {
     }
 
     public static EventLoopGroup createGroup(int nThreads, ThreadFactory ioThreadFactory) {
-        return new EpollEventLoopGroup(nThreads, ioThreadFactory);
+        return new MultithreadEventLoopGroup(nThreads, ioThreadFactory, EpollHandler.newFactory());
     }
 
     public static Class<? extends Channel> getChannelClass() {
