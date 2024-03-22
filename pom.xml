@@ -50,6 +50,7 @@
     <netty.iouring.version>0.0.25.Final</netty.iouring.version>
     <netty5.version>5.0.0.Alpha5</netty5.version>
     <netty.tcnative.version>2.0.65.Final</netty.tcnative.version>
+    <pem-keystore-version>2.3.0</pem-keystore-version>
 
     <!-- Plugin versions -->
     <jacoco.plugin.version>0.8.10</jacoco.plugin.version>
@@ -126,6 +127,11 @@
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-simple</artifactId>
         <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>de.dentrassi.crypto</groupId>
+        <artifactId>pem-keystore</artifactId>
+        <version>${pem-keystore-version}</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>

@@ -60,6 +60,11 @@ public class SslSupportTest extends ImperativeClientTestCase {
     public static final String CLIENT_JKS_KEYSTORE = "src/test/resources/client-jks.keystore";
     public static final String CLIENT_JKS_TRUSTSTORE = "src/test/resources/client-jks.truststore";
 
+    public static final String BROKER_PEM_KEYSTORE = "src/test/resources/broker-keystore.pemcfg";
+    public static final String BROKER_PEM_TRUSTSTORE = "src/test/resources/broker-truststore.pem";
+    public static final String CLIENT_PEM_KEYSTORE = "src/test/resources/client-keystore.pemcfg";
+    public static final String CLIENT_PEM_TRUSTSTORE = "src/test/resources/client-truststore.pem";
+
     public static final String BROKER_JCEKS_KEYSTORE = "src/test/resources/broker-jceks.keystore";
     public static final String BROKER_JCEKS_TRUSTSTORE = "src/test/resources/broker-jceks.truststore";
     public static final String CLIENT_JCEKS_KEYSTORE = "src/test/resources/client-jceks.keystore";
@@ -73,6 +78,8 @@ public class SslSupportTest extends ImperativeClientTestCase {
     public static final String KEYSTORE_JKS_TYPE = "jks";
     public static final String KEYSTORE_JCEKS_TYPE = "jceks";
     public static final String KEYSTORE_PKCS12_TYPE = "pkcs12";
+    public static final String KEYSTORE_PEMCFG_TYPE = "PEMCFG";
+    public static final String KEYSTORE_PEM_TYPE = "PEM";
 
     public static final String[] ENABLED_PROTOCOLS = new String[] { "TLSv1" };
 
@@ -947,6 +954,30 @@ public class SslSupportTest extends ImperativeClientTestCase {
         } catch (IllegalArgumentException iae) {}
     }
 
+    @Test
+    public void testCreateSslContextJksStoreJDK_PEM() throws Exception {
+        SslOptions options = createPEMSslOptions();
+
+        SSLContext context = SslSupport.createJdkSslContext(options);
+        assertNotNull(context);
+
+        assertEquals("TLS", context.getProtocol());
+    }
+
+    @Test
+    public void testCreateSslContextJksStoreOpenSSL_PEM() throws Exception {
+        assumeTrue(OpenSsl.isAvailable());
+        assumeTrue(OpenSsl.supportsKeyManagerFactory());
+
+        SslOptions options = createPEMSslOptions();
+
+        SslContext context = SslSupport.createOpenSslContext(options);
+        assertNotNull(context);
+
+        // TODO There is no means currently of getting the protocol from the netty SslContext.
+        // assertEquals("TLS", context.getProtocol());
+    }
+
     private SslOptions createJksSslOptions() {
         return createJksSslOptions(null);
     }
@@ -960,6 +991,25 @@ public class SslSupportTest extends ImperativeClientTestCase {
         options.storeType(KEYSTORE_JKS_TYPE);
         options.keyStorePassword(PASSWORD);
         options.trustStorePassword(PASSWORD);
+        if (enabledProtocols != null) {
+            options.enabledProtocols(enabledProtocols);
+        }
+
+        return options;
+    }
+
+    private SslOptions createPEMSslOptions() {
+        return createPEMSslOptions(null);
+    }
+
+    private SslOptions createPEMSslOptions(String[] enabledProtocols) {
+        SslOptions options = new SslOptions();
+
+        options.sslEnabled(true);
+        options.keyStoreLocation(CLIENT_PEM_KEYSTORE);
+        options.keyStoreType(KEYSTORE_PEMCFG_TYPE);
+        options.trustStoreLocation(CLIENT_PEM_TRUSTSTORE);
+        options.trustStoreType(KEYSTORE_PEM_TYPE);
         if (enabledProtocols != null) {
             options.enabledProtocols(enabledProtocols);
         }

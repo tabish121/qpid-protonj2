@@ -51,6 +51,7 @@ public class SslTransportTest extends TcpTransportTest {
     public static final String CLIENT_KEYSTORE = "src/test/resources/client-jks.keystore";
     public static final String CLIENT_MULTI_KEYSTORE = "src/test/resources/client-multiple-keys-jks.keystore";
     public static final String CLIENT_TRUSTSTORE = "src/test/resources/client-jks.truststore";
+    public static final String CLIENT_TRUSTSTORE_PEM = "src/test/resources/client-truststore.pem";
     public static final String OTHER_CA_TRUSTSTORE = "src/test/resources/other-ca-jks.truststore";
     public static final String SERVER_CLASSPATH_KEYSTORE = "classpath:broker-jks.keystore";
     public static final String SERVER_CLASSPATH_TRUSTSTORE = "classpath:broker-jks.truststore";
@@ -61,6 +62,7 @@ public class SslTransportTest extends TcpTransportTest {
     public static final String CLIENT2_DN = "O=Client2,CN=client2";
 
     public static final String KEYSTORE_TYPE = "jks";
+    public static final String KEYSTORE_PEM_TYPE = "PEM";
 
     @Test
     public void testConnectToServerWithoutTrustStoreFails() throws Exception {
@@ -220,6 +222,31 @@ public class SslTransportTest extends TcpTransportTest {
             final int port = server.getServerPort();
 
             Transport transport = createTransport(createTransportOptions(), createServerClasspathSSLOptions());
+            try {
+                transport.connect(HOSTNAME, port, testListener).awaitConnect();
+                LOG.info("Connection established to test server: {}:{}", HOSTNAME, port);
+            } catch (Exception e) {
+                fail("Should not have failed to connect to the server at " + HOSTNAME + ":" + port + " but got exception: " + e);
+            }
+
+            assertTrue(transport.isConnected());
+            assertTrue(transport.isSecure());
+
+            transport.close();
+        }
+
+        logTransportErrors();
+        assertTrue(exceptions.isEmpty());
+    }
+
+    @Test
+    public void testConnectToServerWithClientTrustStoreInPemFile() throws Exception {
+        try (NettyEchoServer server = createEchoServer()) {
+            server.start();
+
+            final int port = server.getServerPort();
+
+            Transport transport = createTransport(createTransportOptions(), creatClientSSLOptionsWithPemTrustStore());
             try {
                 transport.connect(HOSTNAME, port, testListener).awaitConnect();
                 LOG.info("Connection established to test server: {}:{}", HOSTNAME, port);
@@ -428,6 +455,18 @@ public class SslTransportTest extends TcpTransportTest {
         options.trustStoreLocation(SERVER_CLASSPATH_TRUSTSTORE);
         options.trustStorePassword(PASSWORD);
         options.storeType(KEYSTORE_TYPE);
+        options.verifyHost(false);
+
+        return options;
+    }
+
+    protected SslOptions creatClientSSLOptionsWithPemTrustStore() {
+        SslOptions options = new SslOptions();
+
+        options.sslEnabled(true);
+        options.trustStoreLocation(CLIENT_TRUSTSTORE_PEM);
+        options.trustStorePassword(PASSWORD);
+        options.storeType(KEYSTORE_PEM_TYPE);
         options.verifyHost(false);
 
         return options;
