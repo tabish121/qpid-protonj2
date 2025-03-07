@@ -39,6 +39,11 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
+    <dependency>
+      <groupId>de.dentrassi.crypto</groupId>
+      <artifactId>pem-keystore</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <!-- Netty 4 Development dependencies -->
     <dependency>
       <groupId>io.netty</groupId>

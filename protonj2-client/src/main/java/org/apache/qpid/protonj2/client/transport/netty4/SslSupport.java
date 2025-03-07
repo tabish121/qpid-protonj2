@@ -36,6 +36,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedKeyManager;
 
 import org.apache.qpid.protonj2.client.SslOptions;
+import org.apache.qpid.protonj2.client.transport.PemKeySupport;
 import org.apache.qpid.protonj2.client.transport.X509AliasKeyManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -440,8 +441,20 @@ public final class SslSupport {
         }
     }
 
+    private static KeyStore createKeyStore(String storeType) throws Exception {
+        final KeyStore store;
+
+        if (storeType.toLowerCase().startsWith(PemKeySupport.PEM_STORE_PREFIX)) {
+            store = PemKeySupport.newPemKeyStore(storeType);
+        } else {
+            store = KeyStore.getInstance(storeType);
+        }
+
+        return store;
+    }
+
     private static KeyStore loadStore(String storePath, final String password, String storeType) throws Exception {
-        final KeyStore store = KeyStore.getInstance(storeType);
+        final KeyStore store = createKeyStore(storeType);
 
         try (InputStream in = openStoreAtLocation(storePath)) {
             store.load(in, password != null ? password.toCharArray() : null);
