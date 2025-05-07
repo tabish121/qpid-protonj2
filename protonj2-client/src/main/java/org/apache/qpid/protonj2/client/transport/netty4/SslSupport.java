@@ -274,11 +274,15 @@ public final class SslSupport {
         engine.setEnabledCipherSuites(buildEnabledCipherSuites(engine, options));
         engine.setUseClientMode(true);
 
+        final SSLParameters sslParameters = engine.getSSLParameters();
+
         if (options.verifyHost()) {
-            SSLParameters sslParameters = engine.getSSLParameters();
             sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
-            engine.setSSLParameters(sslParameters);
+        } else {
+            sslParameters.setEndpointIdentificationAlgorithm(null);
         }
+
+        engine.setSSLParameters(sslParameters);
 
         return engine;
     }

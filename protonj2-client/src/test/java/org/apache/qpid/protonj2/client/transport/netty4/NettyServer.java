@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
@@ -48,7 +49,8 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
+import io.netty.channel.nio.NioIoHandler;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -92,7 +94,7 @@ public abstract class NettyServer implements AutoCloseable {
     private volatile SslHandler sslHandler;
     private volatile HandshakeComplete handshakeComplete;
     private final CountDownLatch handshakeCompletion = new CountDownLatch(1);
-
+    private final AtomicInteger totalConnections = new AtomicInteger();
     private final AtomicBoolean started = new AtomicBoolean();
 
     public NettyServer(TransportOptions options, SslOptions sslOptions) {
@@ -194,8 +196,8 @@ public abstract class NettyServer implements AutoCloseable {
         if (started.compareAndSet(false, true)) {
 
             // Configure the server.
-            bossGroup = new NioEventLoopGroup(1);
-            workerGroup = new NioEventLoopGroup();
+            bossGroup = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
+            workerGroup = new MultiThreadIoEventLoopGroup(1, NioIoHandler.newFactory());
 
             ServerBootstrap server = new ServerBootstrap();
             server.group(bossGroup, workerGroup);
@@ -248,6 +250,7 @@ public abstract class NettyServer implements AutoCloseable {
                 LOG.info("Syncing channel close");
                 serverChannel.close().sync();
             } catch (InterruptedException e) {
+                LOG.trace("Error on server channel close:", e);
             }
 
             // Shut down all event loops to terminate all threads.
@@ -273,6 +276,10 @@ public abstract class NettyServer implements AutoCloseable {
         }
 
         return serverPort;
+    }
+
+    public int getTotalConnections() {
+        return totalConnections.get();
     }
 
     private class NettyServerOutboundHandler extends ChannelOutboundHandlerAdapter  {
@@ -326,9 +333,13 @@ public abstract class NettyServer implements AutoCloseable {
                         LOG.info("Server -> SSL handshake completed. Succeeded: {}", future.isSuccess());
                         if (!future.isSuccess()) {
                             ctx.close();
+                        } else {
+                            totalConnections.incrementAndGet();
                         }
                     }
                 });
+            } else {
+                totalConnections.incrementAndGet();
             }
         }
 

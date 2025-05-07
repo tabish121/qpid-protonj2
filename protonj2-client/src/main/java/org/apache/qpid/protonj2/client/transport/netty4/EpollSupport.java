@@ -24,8 +24,9 @@ import org.slf4j.LoggerFactory;
 
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.MultiThreadIoEventLoopGroup;
 import io.netty.channel.epoll.Epoll;
-import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollIoHandler;
 import io.netty.channel.epoll.EpollSocketChannel;
 
 public final class EpollSupport {
@@ -44,7 +45,7 @@ public final class EpollSupport {
     }
 
     public static EventLoopGroup createGroup(int nThreads, ThreadFactory ioThreadFactory) {
-        return new EpollEventLoopGroup(nThreads, ioThreadFactory);
+        return new MultiThreadIoEventLoopGroup(nThreads, ioThreadFactory, EpollIoHandler.newFactory());
     }
 
     public static Class<? extends Channel> getChannelClass() {
