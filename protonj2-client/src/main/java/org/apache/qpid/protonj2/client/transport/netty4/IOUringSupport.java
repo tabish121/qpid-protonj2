@@ -59,7 +59,7 @@ public final class IOUringSupport {
             ioHandlerFactory = ioUringHandler.getDeclaredMethod("newFactory");
             socketChannelClass = (Class<? extends Channel>) Class.forName("io.netty.channel.uring.IoUringSocketChannel");
             available = (boolean) isAvailable.invoke(null);
-        } catch (Exception e) {
+        } catch (UnsatisfiedLinkError | Exception e) {
             LOG.debug("Unable to enable netty io_uring support due to error", e);
         }
 
@@ -73,7 +73,7 @@ public final class IOUringSupport {
                 constructor = eventLoopGroup.getDeclaredConstructor(int.class, ThreadFactory.class);
                 available = (boolean) isAvailable.invoke(null);
                 incubator = true;
-            } catch (Exception e) {
+            } catch (UnsatisfiedLinkError | Exception e) {
                 LOG.debug("Unable to enable netty incubator io_uring support due to error", e);
             }
         }
