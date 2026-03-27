@@ -466,6 +466,33 @@ public abstract class ScriptWriter {
     }
 
     /**
+     * Creates all the scripted elements needed for a successful SASL OAUTHBEARER
+     * connection. This is generally used with a server type peer which will be
+     * accepting client connections.
+     * <p>
+     * For this exchange the SASL header is expected which is responded to with the
+     * corresponding SASL header and an immediate SASL mechanisms frame that only
+     * advertises OAUTHBEARER as the mechanism.  It is expected that the remote will
+     * send a SASL init with the OAUTHBEARER mechanism selected and the outcome is
+     * predefined as success.  Once done the expectation is added for the AMQP
+     * header to arrive and a header response will be sent.
+     *
+     * @param username
+     *      The user name that is expected in the SASL initial response.
+     * @param token
+     *      The token that is expected in the SASL initial response.
+     * @param vhost
+     * 		The optional 'vhost' value to add as the host portion of the initial response.
+     */
+    public void expectSaslOauthBearerConnect(String username, String token, String vhost) {
+        expectSASLHeader().respondWithSASLHeader();
+        remoteSaslMechanisms().withMechanisms("OAUTHBEARER").queue();
+        expectSaslInit().withMechanism("OAUTHBEARER").withInitialResponse(saslOauthBearerInitialResponse(username, token, vhost));
+        remoteSaslOutcome().withCode(SaslCode.OK).queue();
+        expectAMQPHeader().respondWithAMQPHeader();
+    }
+
+    /**
      * Creates all the scripted elements needed for a failed SASL Plain
      * connection. This is generally used with a server type peer which will be
      * accepting client connections.
@@ -669,6 +696,20 @@ public abstract class ScriptWriter {
         initialResponse[initialResponse.length - 1] = 1;
 
         return initialResponse;
+    }
+
+    public byte[] saslOauthBearerInitialResponse(String username, String token, String vhost) {
+        final StringBuilder builder = new StringBuilder();
+
+        builder.append("n,a=").append(username).append(",").append("\001");
+
+        if (vhost != null && !vhost.isBlank()) {
+            builder.append("host=").append(vhost).append("\001");
+        }
+
+        builder.append("auth=Bearer ").append(token).append("\001\001");
+
+        return builder.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     //----- Smart Scripted Response Actions
