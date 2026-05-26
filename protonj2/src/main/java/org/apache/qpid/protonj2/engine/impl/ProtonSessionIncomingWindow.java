@@ -25,6 +25,7 @@ import org.apache.qpid.protonj2.types.transport.Begin;
 import org.apache.qpid.protonj2.types.transport.Disposition;
 import org.apache.qpid.protonj2.types.transport.Flow;
 import org.apache.qpid.protonj2.types.transport.Role;
+import org.apache.qpid.protonj2.types.transport.SessionError;
 import org.apache.qpid.protonj2.types.transport.Transfer;
 
 /**
@@ -62,7 +63,7 @@ public class ProtonSessionIncomingWindow {
 
     public ProtonSessionIncomingWindow(ProtonSession session) {
         this.session = session;
-        this.engine = session.getConnection().getEngine();
+        this.engine = session.getEngine();
         this.maxFrameSize = (int) session.getConnection().getMaxFrameSize();
     }
 
@@ -132,14 +133,18 @@ public class ProtonSessionIncomingWindow {
      *      the payload that was transmitted with the incoming {@link Transfer}
      */
     Transfer handleTransfer(ProtonLink<?> link, Transfer transfer, ProtonBuffer payload) {
-        incomingBytes += payload != null ? payload.getReadableBytes() : 0;
-        incomingWindow--;
-        nextIncomingId++;
+        if (--incomingWindow < 0) {
+            engine.engineFailed(new ProtocolViolationException(SessionError.WINDOW_VIOLATION,
+                "Sender violated session incoming window limit: " + link.getHandle()));
+        } else {
+            incomingBytes += payload != null ? payload.getReadableBytes() : 0;
+            nextIncomingId++;
 
-        final ProtonIncomingDelivery delivery = link.remoteTransfer(transfer, payload);
+            final ProtonIncomingDelivery delivery = link.remoteTransfer(transfer, payload);
 
-        if (!delivery.isSettled() && !delivery.isRemotelySettled() && delivery.isFirstTransfer()) {
-            unsettled.put((int) delivery.getDeliveryId(), delivery);
+            if (!delivery.isSettled() && !delivery.isRemotelySettled() && delivery.isFirstTransfer()) {
+                unsettled.put((int) delivery.getDeliveryId(), delivery);
+            }
         }
 
         return transfer;
